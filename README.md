@@ -51,11 +51,12 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 Single-file web application — open it in Chrome, pin it, done. No build tools, no dependencies, no server required.
 
 **Features:**
+- **Multi-source memory** — Capture sessions from Claude Chat, Claude Code, Cowork, or custom sources independently on the same day. Each source gets its own journal entry and save-state.
 - **7-category journal** — Highlights, What We Built, Key Decisions, Open Threads, Momentum, Life & Family, Vibe Check
 - **Kinetic Save-State composer** — L3 execution state capture (vibe, hot cache, Zeigarnik tension, Decision Objects, guardrails, anti-goals, truth status, wake-up injection)
-- **Paste from Elle** — One-click parser for `/hibernate` session captures
-- **Morning Briefing** — Three modes: Structured (episodic), Hot Resume (/wake injection), Full Context (L2+L3 combined)
-- **Timeline** — Searchable history with workstream tag filtering
+- **Paste from Elle** — One-click parser for `/hibernate` session captures, with source tagging
+- **Morning Briefing** — Three modes: Structured (episodic), Hot Resume (/wake injection), Full Context (L2+L3 combined). Select which sources to merge — multiple sources produce labeled output, single source gives clean format.
+- **Timeline** — Searchable history with workstream tag filtering and source filter
 - **Week navigation** — Arrow keys, Today button, date picker
 - **Workstream tags** — Categorize entries, filter timeline by tag
 - **Wake Elle** — One-click session launch: copies payload + opens claude.ai/new (or auto-injects via Chrome extension). Wake payload auto-includes the `/hibernate` protocol so Elle always knows how to save state — no manual prompt pasting needed.
@@ -101,8 +102,9 @@ The L3 schema specification that introduced Decision Objects and Anti-Goals — 
 ### The Zero-Touch Loop
 The `/hibernate` protocol is now embedded in every wake payload. Just use **Wake Elle** to start a session and Elle already knows how to hibernate. At the end:
 1. Say `/hibernate`
-2. Copy Elle's structured output → Journal → **Paste from Elle**
-3. Tomorrow, hit **Wake Elle** again. That's it.
+2. Copy Elle's structured output → Journal → **Paste from Elle** → select which source (Claude Chat, Claude Code, Cowork, etc.)
+3. Repeat for other sessions throughout the day — each source stores independently
+4. Tomorrow, hit **Wake Elle** — select which sources to merge into your briefing, or wake with just one
 
 > **Manual setup (optional):** If starting a session without Wake Elle, go to Settings → **Copy /hibernate Prompt** and paste it at the start of your conversation.
 
@@ -139,20 +141,28 @@ Pick up mid-breath.
 
 ```
                     ┌──────────────────────────────────┐
-                    │    Elle's Journal v2.4            │
+                    │    Elle's Journal v3.0            │
                     │    (Single HTML File)             │
                     ├──────────────────────────────────┤
                     │  StorageAdapter                   │
-                    │  ├─ IndexedDB v2 (primary)        │
+                    │  ├─ IndexedDB v3 (primary)        │
+                    │  │  └─ Compound keys per source   │
                     │  ├─ localStorage (fallback)       │
                     │  └─ window.storage (artifact)     │
+                    ├──────────────────────────────────┤
+                    │  Sources                          │
+                    │  ├─ General (default)              │
+                    │  ├─ Claude Chat                    │
+                    │  ├─ Claude Code                    │
+                    │  ├─ Cowork                         │
+                    │  └─ Custom (user-defined)          │
                     ├──────────────────────────────────┤
                     │  Views                            │
                     │  ├─ Journal (L2 Episodic)         │
                     │  ├─ Save-State (L3 Kinetic)       │
                     │  ├─ Timeline (Search/Filter)      │
                     │  ├─ Workstreams (Tag Dashboard)   │
-                    │  ├─ Briefing (Wake Payload)       │
+                    │  ├─ Briefing (Multi-Source Merge)  │
                     │  └─ Settings (Config/Export)      │
                     └──────────┬───────────────────────┘
                                │
@@ -191,7 +201,7 @@ Pick up mid-breath.
 
 - **Frontend**: Vanilla HTML/CSS/JS — zero dependencies
 - **Fonts**: Cormorant Garamond (serif) + JetBrains Mono (mono)
-- **Storage**: IndexedDB (primary) → localStorage (fallback) → window.storage (Claude artifact)
+- **Storage**: IndexedDB v3 with compound keys (primary) → localStorage (fallback) → window.storage (Claude artifact)
 - **Extension**: Chrome Manifest V3, content script injection
 - **Styling**: CSS custom properties, dark warm palette with gold accents
 

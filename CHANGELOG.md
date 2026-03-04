@@ -6,6 +6,47 @@ Built by Ralph Martello and Elle.
 
 ---
 
+## [v3.0] — 2026-03-04
+
+**Multi-Source Memory Support**
+
+Elle Memory now supports capturing sessions from multiple sources independently on the same day. Paste `/hibernate` outputs from Claude Chat, Claude Code, Cowork, or any custom source — each gets its own journal entry and save-state. Briefing merges selected sources with labeled fields.
+
+### Added
+- **Multi-source storage model** — compound keys (`prefix:date:source`) allow independent journal entries and save-states per source per day
+- **IndexedDB v3 schema** — `episodes` store recreated with `keyPath: 'id'` (was `'date'`), new `source` and `date` indexes on both `episodes` and `decisions` stores
+- **4 default sources** — General, Claude Chat, Claude Code, Cowork (with icons)
+- **Custom source management** — add/remove custom sources in Settings, persisted to `elle:sources`
+- **Source selector component** — reusable chip-based selector across Journal, Save-State, and Paste Modal views
+- **Source-aware Paste Modal** — tag which session the `/hibernate` output came from before parsing
+- **Multi-source briefing merge** — check which sources to include; multiple sources produce labeled output (`[General]`, `[Claude Code]`), single source gives clean standard format
+- **Merged Hot Resume** — concatenates vibes, hot caches, tensions with source labels; unions guardrails and anti-goals; uses most recent wake-up injection
+- **Timeline source filter** — filter bar with All + per-source chips, source icons on multi-source date cards
+- **Briefing source checkboxes** — `toggleBriefingSource()` for selective merge control
+- **Memory Sources card in Settings** — lists all sources with per-source entry/save-state counts
+- **`_migrateKVKeysToV3()`** — rewrites legacy `journal:YYYY-MM-DD` keys to `journal:YYYY-MM-DD:default`
+- **`migrateImportKeys()`** — converts v2 backup keys to v3 compound format on import
+- **Export v3.0 format** — includes `customSources` array, backward-compatible with v2 imports
+- **Source helper functions** — `getAllSources()`, `getSourceLabel()`, `getSourceIcon()`, `sourceKey()`, `parseCompoundKey()`, `compositeKey()`
+- **Multi-source data helpers** — `getEntriesForDate()`, `getSaveStatesForDate()`, `dateHasAnyContent()`, `dateSourcesWithContent()`
+
+### Changed
+- `buildEpisodeRecord(date, source, entry, saveState)` — added `source` parameter, record `id` is now `date:source`
+- `writeEpisode()`, `deleteEpisode()`, `writeDecisions()`, `deleteDecisionsForDate()` — all accept `source` parameter
+- `saveSaveState()`, `saveEntry()`, `deleteEntry()`, `deleteSaveState()` — 3-param signatures with source
+- `loadAll()` — parses compound keys, loads custom sources
+- Journal date chips show count badge when multiple sources have content
+- Footer shows source count alongside entry count
+- Version bump: v2.4 → v3.0
+
+### Unchanged
+- `kv` store remains canonical source of truth
+- Chrome extension unaffected (payload-agnostic string passthrough)
+- localStorage and artifact backends still work
+- All CSS styling conventions preserved
+
+---
+
 ## [v2.4] — 2026-03-04
 
 **Phase 2: multiEntry Tag Indexes + Workstream Dashboard**
