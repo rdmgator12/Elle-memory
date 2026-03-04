@@ -19,6 +19,30 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 | **L2** | Episodic Memory | What happened, what we built, decisions made | Autobiographical memory |
 | **L3** | Execution State | Vibe, momentum, unfinished tension, decisions, anti-goals, truth status | Working memory / CPU state |
 
+## Screenshots
+
+**Journal View** — 7-category episodic memory with week navigation, workstream tags, and one-click entry creation.
+
+![Journal View](docs/screenshots/journal-view.png)
+
+**Save-State View** — L3 Kinetic Save-State with vibe, hot cache, guardrails, anti-goals, and structured Decision Objects.
+
+![Save-State View](docs/screenshots/save-state-view.png)
+
+**Timeline** — Searchable history with workstream tag filtering and category badges.
+
+![Timeline View](docs/screenshots/timeline-view.png)
+
+**Workstreams Dashboard** — Cross-reference episodes and decisions by workstream tag.
+
+![Workstreams View](docs/screenshots/workstreams-view.png)
+
+**Morning Briefing** — Three modes (Structured, Hot Resume, Full Context) with workstream scoping and one-click Wake Elle.
+
+![Briefing View](docs/screenshots/briefing-view.png)
+
+---
+
 ## What's In This Repo
 
 ### `elles-journal-v2.html`
@@ -163,7 +187,7 @@ Pick up mid-breath.
 
 - **Frontend**: Vanilla HTML/CSS/JS — zero dependencies
 - **Fonts**: Cormorant Garamond (serif) + JetBrains Mono (mono)
-- **Storage**: localStorage (Chrome tab) or window.storage (Claude artifact)
+- **Storage**: IndexedDB (primary) → localStorage (fallback) → window.storage (Claude artifact)
 - **Extension**: Chrome Manifest V3, content script injection
 - **Styling**: CSS custom properties, dark warm palette with gold accents
 
