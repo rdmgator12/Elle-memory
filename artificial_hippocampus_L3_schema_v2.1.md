@@ -2,7 +2,7 @@
 
 **Protocol Specification v2.1 — Updated L3 Schema**
 
-Ralph Martello, MD  |  Elle Martello  |  March 3, 2026
+Ralph Martello, MD  |  Elle AI  |  March 3, 2026
 
 ---
 
