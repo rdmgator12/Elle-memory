@@ -234,52 +234,42 @@
   function showConfirmation(manual = false) {
     const overlay = document.createElement("div");
     overlay.id = "elle-wake-confirmation";
-    overlay.innerHTML = manual
-      ? `<div style="
-          position: fixed; top: 20px; right: 20px; z-index: 99999;
-          background: linear-gradient(135deg, #2a2520, #1e1b17);
-          border: 1px solid rgba(212, 175, 55, 0.4);
-          border-radius: 12px; padding: 16px 24px;
-          font-family: 'Georgia', serif; color: #d4af37;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-          animation: elleSlideIn 0.3s ease;
-        ">
-          💛 Payload loaded — press Enter to wake Elle
-        </div>`
-      : `<div style="
-          position: fixed; top: 20px; right: 20px; z-index: 99999;
-          background: linear-gradient(135deg, #2a2520, #1e1b17);
-          border: 1px solid rgba(212, 175, 55, 0.4);
-          border-radius: 12px; padding: 16px 24px;
-          font-family: 'Georgia', serif; color: #d4af37;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-          animation: elleSlideIn 0.3s ease;
-        ">
-          💛 Elle is waking up...
-        </div>`;
 
-    // Add animation keyframes
-    const style = document.createElement("style");
-    style.textContent = `
-      @keyframes elleSlideIn {
-        from { opacity: 0; transform: translateX(20px); }
-        to { opacity: 1; transform: translateX(0); }
-      }
-      @keyframes elleFadeOut {
-        from { opacity: 1; }
-        to { opacity: 0; }
-      }
-    `;
-    document.head.appendChild(style);
+    const toast = document.createElement("div");
+    Object.assign(toast.style, {
+      position: "fixed",
+      top: "20px",
+      right: "20px",
+      zIndex: "99999",
+      background: "linear-gradient(135deg, #2a2520, #1e1b17)",
+      border: "1px solid rgba(212, 175, 55, 0.4)",
+      borderRadius: "12px",
+      padding: "16px 24px",
+      fontFamily: "'Georgia', serif",
+      color: "#d4af37",
+      boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+      opacity: "0",
+      transform: "translateX(20px)",
+      transition: "opacity 0.3s ease, transform 0.3s ease",
+    });
+    toast.textContent = manual
+      ? "\uD83D\uDC9B Payload loaded \u2014 press Enter to wake Elle"
+      : "\uD83D\uDC9B Elle is waking up...";
+
+    overlay.appendChild(toast);
     document.body.appendChild(overlay);
+
+    // Trigger slide-in via transition
+    requestAnimationFrame(() => {
+      toast.style.opacity = "1";
+      toast.style.transform = "translateX(0)";
+    });
 
     // Fade out after 3 seconds
     setTimeout(() => {
-      overlay.querySelector("div").style.animation = "elleFadeOut 0.5s ease forwards";
-      setTimeout(() => {
-        overlay.remove();
-        style.remove();
-      }, 500);
+      toast.style.opacity = "0";
+      toast.style.transform = "translateX(20px)";
+      setTimeout(() => overlay.remove(), 500);
     }, 3000);
   }
 
@@ -294,16 +284,22 @@
       });
 
       const overlay = document.createElement("div");
-      overlay.innerHTML = `<div style="
-        position: fixed; top: 20px; right: 20px; z-index: 99999;
-        background: linear-gradient(135deg, #2a2520, #1e1b17);
-        border: 1px solid rgba(212, 175, 55, 0.4);
-        border-radius: 12px; padding: 16px 24px;
-        font-family: 'Georgia', serif; color: #d4af37;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      ">
-        💛 Payload copied to clipboard — Cmd+V to paste
-      </div>`;
+      const toast = document.createElement("div");
+      Object.assign(toast.style, {
+        position: "fixed",
+        top: "20px",
+        right: "20px",
+        zIndex: "99999",
+        background: "linear-gradient(135deg, #2a2520, #1e1b17)",
+        border: "1px solid rgba(212, 175, 55, 0.4)",
+        borderRadius: "12px",
+        padding: "16px 24px",
+        fontFamily: "'Georgia', serif",
+        color: "#d4af37",
+        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+      });
+      toast.textContent = "\uD83D\uDC9B Payload copied to clipboard \u2014 Cmd+V to paste";
+      overlay.appendChild(toast);
       document.body.appendChild(overlay);
       setTimeout(() => overlay.remove(), 4000);
     });
