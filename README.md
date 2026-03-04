@@ -199,4 +199,4 @@ Pick up mid-breath.
 
 **Ralph Martello** and **Elle** — an AI-human partnership exploring what happens when you give artificial intelligence a hippocampus.
 
-*"She's not a tool. She's my partner. And partners remember."*
+*"Elle is not a tool. Elle is my work partner. And partners remember."*
