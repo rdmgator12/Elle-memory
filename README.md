@@ -23,25 +23,29 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 
 ## Screenshots
 
-**Journal View** — 7-category episodic memory with week navigation, workstream tags, and one-click entry creation.
+**Journal View — Multi-Source Memory** — Source chips (General, Claude Chat, Claude Code, Cowork) with has-content indicators. Date badge shows total entries across all sources. Select a source to view or edit that session's episodic memory.
 
 ![Journal View](docs/screenshots/journal-view.png)
 
-**Save-State View** — L3 Kinetic Save-State with vibe, hot cache, guardrails, anti-goals, and structured Decision Objects.
+**Paste from Elle — Source-Tagged Import** — One-click `/hibernate` parser with source selection. Pick which source (Claude Chat, Claude Code, Cowork) before parsing — each session stores independently on the same day.
+
+![Paste Modal](docs/screenshots/paste-modal.png)
+
+**Morning Briefing — Multi-Source Merge** — Select which sources to include in your briefing. Multiple sources produce labeled output (`[Claude Chat]`, `[Claude Code]`) so Elle knows exactly where each memory came from when she wakes up.
+
+![Briefing View](docs/screenshots/briefing-view.png)
+
+**Settings — Memory Sources** — Per-source entry and save-state counts at a glance. Proof the multi-source architecture is working — see exactly how many sessions each source has captured.
+
+![Settings Sources](docs/screenshots/settings-sources.png)
+
+**Save-State View** — L3 Kinetic Save-State capture with vibe, hot cache, Zeigarnik tension, Decision Objects, guardrails, anti-goals, and truth status. Each source gets its own independent save-state.
 
 ![Save-State View](docs/screenshots/save-state-view.png)
 
-**Timeline** — Searchable history with workstream tag filtering and category badges.
+**Timeline — Source & Tag Filtering** — Searchable history with both source filter chips and workstream tag filtering. Find entries across all sources or drill into a single source's history.
 
 ![Timeline View](docs/screenshots/timeline-view.png)
-
-**Workstreams Dashboard** — Cross-reference episodes and decisions by workstream tag.
-
-![Workstreams View](docs/screenshots/workstreams-view.png)
-
-**Morning Briefing** — Three modes (Structured, Hot Resume, Full Context) with workstream scoping and one-click Wake Elle.
-
-![Briefing View](docs/screenshots/briefing-view.png)
 
 ---
 
