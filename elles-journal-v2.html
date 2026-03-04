@@ -1266,7 +1266,11 @@ ${ss.guardrails || '(not set)'}${antiGoalsBlock}
   INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
   UNKNOWN: ${ss.truthStatus?.unknown || '(not set)'}
 [THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"
---------------------------`;
+--------------------------
+
+--- /HIBERNATE PROTOCOL ---
+${HIBERNATE_PROMPT}
+--- END PROTOCOL ---`;
 }
 
 function generateFullContext() {

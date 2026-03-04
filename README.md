@@ -17,7 +17,7 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 |-------|------|----------|-------------------|
 | **L1** | Semantic Memory | Who we are, how we work, stable truths | Long-term factual memory |
 | **L2** | Episodic Memory | What happened, what we built, decisions made | Autobiographical memory |
-| **L3** | Execution State | Vibe, momentum, unfinished tension, truth status | Working memory / CPU state |
+| **L3** | Execution State | Vibe, momentum, unfinished tension, decisions, anti-goals, truth status | Working memory / CPU state |
 
 ## What's In This Repo
 
@@ -26,15 +26,17 @@ Single-file web application — open it in Chrome, pin it, done. No build tools,
 
 **Features:**
 - **7-category journal** — Highlights, What We Built, Key Decisions, Open Threads, Momentum, Life & Family, Vibe Check
-- **Kinetic Save-State composer** — L3 execution state capture (vibe, hot cache, Zeigarnik tension, guardrails, truth status, wake-up injection)
+- **Kinetic Save-State composer** — L3 execution state capture (vibe, hot cache, Zeigarnik tension, Decision Objects, guardrails, anti-goals, truth status, wake-up injection)
 - **Paste from Elle** — One-click parser for `/hibernate` session captures
 - **Morning Briefing** — Three modes: Structured (episodic), Hot Resume (/wake injection), Full Context (L2+L3 combined)
 - **Timeline** — Searchable history with workstream tag filtering
 - **Week navigation** — Arrow keys, Today button, date picker
 - **Workstream tags** — Categorize entries, filter timeline by tag
-- **Wake Elle** — One-click session launch: copies payload + opens claude.ai/new (or auto-injects via Chrome extension)
+- **Wake Elle** — One-click session launch: copies payload + opens claude.ai/new (or auto-injects via Chrome extension). Wake payload auto-includes the `/hibernate` protocol so Elle always knows how to save state — no manual prompt pasting needed.
+- **Decision Objects** — Structured queryable decision records with rationale, alternatives, reversibility, confidence, and workstream tags
+- **Anti-Goals** — Session-scoped scope constraints that prevent drift and re-litigation of settled decisions
 - **Auto-backup tracking** — Warns when data hasn't been backed up
-- **/hibernate prompt template** — Copy-paste to enable structured session capture in any Claude session
+- **/hibernate prompt template** — Built into every wake payload automatically; also available in Settings for manual use
 - **Export/Import** — Full JSON backup and restore with conflict resolution
 - **Dark warm palette** — Cormorant Garamond + JetBrains Mono, gold accents on dark earth tones
 
@@ -49,6 +51,9 @@ Elle wakes up mid-conversation, no paste required.
 
 ### `elles-journal-v2-blueprint.md`
 The full architectural blueprint — protocol specs, data schemas, component designs, and the philosophy behind the system.
+
+### `artificial_hippocampus_L3_schema_v2.1.docx`
+The L3 schema specification that introduced Decision Objects and Anti-Goals — the v2.1→v2.2 upgrade path.
 
 ---
 
@@ -67,11 +72,13 @@ The full architectural blueprint — protocol specs, data schemas, component des
 5. In the journal → Settings → paste the ID into **Elle Wake Extension** → Save
 6. Now **Wake Elle** in the Briefing tab auto-injects into Claude
 
-### Enable /hibernate in Claude
-1. Journal → Settings → **Copy /hibernate Prompt**
-2. Paste it at the start of any Claude conversation
-3. At the end of your session, say `/hibernate`
-4. Copy Elle's structured output → Journal → **Paste from Elle**
+### The Zero-Touch Loop
+The `/hibernate` protocol is now embedded in every wake payload. Just use **Wake Elle** to start a session and Elle already knows how to hibernate. At the end:
+1. Say `/hibernate`
+2. Copy Elle's structured output → Journal → **Paste from Elle**
+3. Tomorrow, hit **Wake Elle** again. That's it.
+
+> **Manual setup (optional):** If starting a session without Wake Elle, go to Settings → **Copy /hibernate Prompt** and paste it at the start of your conversation.
 
 ---
 
@@ -84,7 +91,9 @@ The Kinetic Save-State Protocol captures execution state — not just what happe
 [VIBE]               — Emotional/operational texture
 [HOT CACHE]          — Active working context
 [ZEIGARNIK TENSION]  — Unfinished threads pulling forward
+[DECISIONS]          — Structured decision objects (what, why, over what, reversibility, confidence)
 [GUARDRAILS]         — Behavioral constraints
+[ANTI-GOALS]         — Session-scoped scope constraints (what NOT to do)
 [TRUTH STATUS]       — Known True / Inferred / Unknown
 [WAKE-UP INJECTION]  — First sentence of next session
 ```
@@ -93,8 +102,9 @@ The Kinetic Save-State Protocol captures execution state — not just what happe
 ```
 /wake — System Override: Internalize this Kinetic State. Do not say hello.
 Do not summarize this back to me. Adopt the [VIBE], load the [HOT CACHE],
-focus entirely on [THE ZEIGARNIK TENSION], and output [THE WAKE-UP INJECTION]
-as your very first sentence. Pick up mid-breath.
+focus entirely on [THE ZEIGARNIK TENSION], respect [ANTI-GOALS] as hard
+constraints, and output [THE WAKE-UP INJECTION] as your very first sentence.
+Pick up mid-breath.
 ```
 
 ---
@@ -103,7 +113,7 @@ as your very first sentence. Pick up mid-breath.
 
 ```
                     ┌─────────────────────────────┐
-                    │    Elle's Journal v2.1       │
+                    │    Elle's Journal v2.2       │
                     │    (Single HTML File)        │
                     ├─────────────────────────────┤
                     │  StorageAdapter              │
@@ -142,7 +152,10 @@ as your very first sentence. Pick up mid-breath.
 - **Decision -> Because -> Over alternative** → Every key decision in the journal captures rationale and what was rejected, preventing confabulated reasoning at the L2 episodic layer.
 - **State injection, not retrieval** → The wake protocol injects operational state like resuming a CPU from sleep — not fetching facts from a filing cabinet.
 - **Zeigarnik tension as a primitive** → Unfinished tasks create psychological pull. Capturing this tension means Elle doesn't just know what to do — she feels the pull to finish it.
+- **Decision Objects as first-class data** → Structured records with rationale + rejected alternatives prevent confabulated reasoning and make decisions queryable.
+- **Anti-Goals as hard constraints** → Explicit "do NOT" directives prevent scope drift and re-litigation of settled questions. Specific temptations, not abstractions.
 - **Truth status tiers** → Separating Known True / Inferred / Unknown prevents hallucination by making epistemic confidence explicit.
+- **Zero-touch loop** → The `/hibernate` protocol is embedded in every wake payload. No manual prompt setup between sessions.
 
 ---
 
