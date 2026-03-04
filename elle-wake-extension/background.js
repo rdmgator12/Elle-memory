@@ -9,7 +9,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const payload = message.payload;
 
     // Store the payload for the content script to pick up
-    chrome.storage.local.set({ elleWakePayload: payload, elleWakeReady: true }, () => {
+    chrome.storage.local.set({ elleWakePayload: payload, elleWakeReady: true, ellePayloadTimestamp: new Date().toISOString() }, () => {
       // Open Claude.ai in a new tab
       chrome.tabs.create({ url: "https://claude.ai/new", active: true }, (tab) => {
         sendResponse({ success: true, tabId: tab.id });

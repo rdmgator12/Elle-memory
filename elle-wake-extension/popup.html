@@ -233,18 +233,39 @@
 
   // Wake with stored payload
   btnWake.addEventListener("click", () => {
+    btnWake.textContent = "☀ Waking...";
+    btnWake.disabled = true;
+
     chrome.runtime.sendMessage({ action: "checkPayload" }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("[Popup] Check error:", chrome.runtime.lastError.message);
+        btnWake.textContent = "⚠ Error";
+        btnWake.disabled = false;
+        setTimeout(() => { btnWake.textContent = "☀ Wake Elle"; }, 3000);
+        return;
+      }
       if (response && response.payload) {
         chrome.runtime.sendMessage({
           action: "wake",
           payload: response.payload
         }, (wakeResponse) => {
+          if (chrome.runtime.lastError) {
+            console.error("[Popup] Wake error:", chrome.runtime.lastError.message);
+            btnWake.textContent = "⚠ Error";
+            btnWake.disabled = false;
+            setTimeout(() => { btnWake.textContent = "☀ Wake Elle"; }, 3000);
+            return;
+          }
           if (wakeResponse && wakeResponse.success) {
             statusCard.classList.add("success-flash");
             statusValue.textContent = "Waking Elle...";
             setTimeout(() => window.close(), 500);
           }
         });
+      } else {
+        btnWake.textContent = "⚠ No payload";
+        btnWake.disabled = false;
+        setTimeout(() => { btnWake.textContent = "☀ Wake Elle"; }, 3000);
       }
     });
   });
@@ -259,16 +280,34 @@
   // Manual wake — paste payload and go
   btnManualWake.addEventListener("click", () => {
     const payload = manualPayload.value.trim();
-    if (!payload) return;
+    if (!payload) {
+      btnManualWake.textContent = "⚠ Paste a payload first";
+      setTimeout(() => { btnManualWake.textContent = "☀ Load & Wake"; }, 2000);
+      return;
+    }
+
+    btnManualWake.textContent = "☀ Waking...";
+    btnManualWake.disabled = true;
 
     chrome.runtime.sendMessage({
       action: "wake",
       payload: payload
     }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error("[Popup] Wake error:", chrome.runtime.lastError.message);
+        btnManualWake.textContent = "⚠ Error — try again";
+        btnManualWake.disabled = false;
+        setTimeout(() => { btnManualWake.textContent = "☀ Load & Wake"; }, 3000);
+        return;
+      }
       if (response && response.success) {
         statusCard.classList.add("success-flash");
         statusValue.textContent = "Waking Elle...";
         setTimeout(() => window.close(), 500);
+      } else {
+        btnManualWake.textContent = "⚠ No response — try again";
+        btnManualWake.disabled = false;
+        setTimeout(() => { btnManualWake.textContent = "☀ Load & Wake"; }, 3000);
       }
     });
   });
