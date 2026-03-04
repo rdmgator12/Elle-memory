@@ -2499,7 +2499,35 @@ async function wakeElle() {
   btn.textContent = '☀ Waking...';
   btn.classList.add('waking');
 
-  // Try Elle Wake extension if available
+  function wakeSuccess() {
+    btn.textContent = '✓ Elle is waking up';
+    setTimeout(() => { btn.textContent = '☀ Wake Elle'; btn.classList.remove('waking'); }, 3000);
+  }
+
+  // Strategy 1: PostMessage bridge (works on file:// and https://)
+  // The content-journal.js bridge script listens for these messages
+  try {
+    const bridgeResult = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Bridge timeout')), 3000);
+      function onResponse(event) {
+        if (event.source !== window) return;
+        if (!event.data || event.data.type !== 'elle-wake-response') return;
+        window.removeEventListener('message', onResponse);
+        clearTimeout(timeout);
+        if (event.data.success) resolve(event.data);
+        else reject(new Error('Bridge reported failure'));
+      }
+      window.addEventListener('message', onResponse);
+      window.postMessage({ type: 'elle-wake', action: 'wake', payload }, '*');
+    });
+    console.log('[Wake] Bridge success — Elle is waking up');
+    wakeSuccess();
+    return;
+  } catch (e) {
+    console.log('[Wake] Bridge unavailable:', e.message);
+  }
+
+  // Strategy 2: External messaging (works on https:// with extension ID)
   const extId = localStorage.getItem('elle-wake-extension-id');
   if (extId && chrome?.runtime?.sendMessage) {
     try {
@@ -2512,28 +2540,25 @@ async function wakeElle() {
           }
         });
       });
-      btn.textContent = '✓ Elle is waking up';
-      setTimeout(() => { btn.textContent = '☀ Wake Elle'; btn.classList.remove('waking'); }, 3000);
+      console.log('[Wake] External messaging success');
+      wakeSuccess();
       return;
     } catch (e) {
-      console.log('[Wake] Extension unavailable, using fallback:', e.message);
+      console.log('[Wake] External messaging unavailable:', e.message);
     }
   }
 
-  // Fallback: copy to clipboard, show confirmation, then open Claude
+  // Strategy 3: Clipboard fallback
   try {
     await navigator.clipboard.writeText(payload);
     btn.textContent = '✓ Copied! Opening Claude...';
     btn.classList.remove('waking');
-    // Show a toast so user knows to paste
     showWakeToast('Payload copied to clipboard — press ⌘V to paste in Claude');
-    // Brief delay so user sees confirmation before tab switch
     setTimeout(() => {
       window.open('https://claude.ai/new', '_blank');
       btn.textContent = '☀ Wake Elle';
     }, 1200);
   } catch (e) {
-    // Last resort: just open Claude
     window.open('https://claude.ai/new', '_blank');
     btn.textContent = '⚠ Open Claude — copy manually';
     btn.classList.remove('waking');

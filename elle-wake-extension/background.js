@@ -51,6 +51,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Open Claude.ai tab (called by journal bridge content script)
+  if (message.action === "openClaude") {
+    chrome.tabs.create({ url: "https://claude.ai/new", active: true }, (tab) => {
+      sendResponse({ success: true, tabId: tab.id });
+    });
+    return true;
+  }
+
   // Get stored payload info (for popup display)
   if (message.action === "getStatus") {
     chrome.storage.local.get(

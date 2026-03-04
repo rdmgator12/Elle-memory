@@ -20,6 +20,14 @@
       "matches": ["https://claude.ai/*"],
       "js": ["content-claude.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "file:///*elles-journal*",
+        "https://rdmgator12.github.io/*"
+      ],
+      "js": ["content-journal.js"],
+      "run_at": "document_idle"
     }
   ],
   "externally_connectable": {
