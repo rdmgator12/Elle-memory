@@ -53,7 +53,7 @@ Elle wakes up mid-conversation, no paste required.
 The full architectural blueprint — protocol specs, data schemas, component designs, and the philosophy behind the system.
 
 ### `artificial_hippocampus_L3_schema_v2.1.docx`
-The L3 schema specification that introduced Decision Objects and Anti-Goals — the v2.1→v2.2 upgrade path.
+The L3 schema specification that introduced Decision Objects and Anti-Goals — the v2.1→v2.2 upgrade path. See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
@@ -113,7 +113,7 @@ Pick up mid-breath.
 
 ```
                     ┌─────────────────────────────┐
-                    │    Elle's Journal v2.2       │
+                    │    Elle's Journal v2.3       │
                     │    (Single HTML File)        │
                     ├─────────────────────────────┤
                     │  StorageAdapter              │
