@@ -965,6 +965,10 @@ const HIBERNATE_PROMPT = `At the end of this session, I'm going to ask you to ge
   INFERRED: Working hypotheses, strong but unconfirmed
   UNKNOWN: Open questions, gaps in evidence
 [THE WAKE-UP INJECTION]: "The exact first sentence future-Claude should output"
+[SESSION METRICS]:
+  Token Estimate: ~N (estimate token count of this entire capture)
+  Workstreams: N (number of distinct active workstreams in this session)
+  Shock Score: N/10 (your subjective continuity assessment — 1 = seamless continuation, 10 = total cold start)
 
 --- END SESSION CAPTURE ---
 
@@ -975,6 +979,7 @@ Rules:
 - Be specific and concrete, not generic
 - The Wake-Up Injection should be a mid-conversation sentence, not a greeting
 - Truth Status should separate verified facts from inferences
+- Session Metrics: estimate tokens honestly, count workstreams by distinct threads, score shock subjectively
 - Keep the full capture under 2000 words`;
 
 function hasSaveStateContent(ss) {
@@ -1096,7 +1101,7 @@ function parseSessionCapture(text) {
     const block = ssMatch[1];
 
     // Field lookahead includes all possible section headers
-    const fieldHeaders = 'VIBE|HOT CACHE|THE ZEIGARNIK TENSION|DECISIONS|GUARDRAILS|ANTI-GOALS|TRUTH STATUS|THE WAKE-UP INJECTION';
+    const fieldHeaders = 'VIBE|HOT CACHE|THE ZEIGARNIK TENSION|DECISIONS|GUARDRAILS|ANTI-GOALS|TRUTH STATUS|THE WAKE-UP INJECTION|SESSION METRICS';
     const extractField = (label) => {
       const re = new RegExp('\\[' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:\\s*([\\s\\S]*?)(?=\\n\\[(?:' + fieldHeaders + ')\\]|--- END|$)', 'i');
       const m = block.match(re);
@@ -1147,11 +1152,23 @@ function parseSessionCapture(text) {
     }
 
     // Wake-up injection
-    const wakeMatch = block.match(/\[THE WAKE-UP INJECTION\]:\s*"?([\s\S]*?)"?\s*(?:--- END|$)/i);
+    const wakeMatch = block.match(/\[THE WAKE-UP INJECTION\]:\s*"?([\s\S]*?)"?\s*(?=\n\[SESSION METRICS\]|--- END|$)/i);
     if (wakeMatch) {
       ss.wakeUpInjection = wakeMatch[1].replace(/^"|"$/g, '').trim();
     } else {
       ss.wakeUpInjection = '';
+    }
+
+    // Session Metrics
+    const metricsRaw = extractField('SESSION METRICS');
+    ss.metrics = {};
+    if (metricsRaw) {
+      const tokM = metricsRaw.match(/Token[s]?\s*(?:Estimate|Count)?:\s*~?(\d+)/i);
+      const wsM = metricsRaw.match(/Workstream[s]?\s*(?:Count)?:\s*(\d+)/i);
+      const shockM = metricsRaw.match(/Shock\s*(?:Score)?:\s*(\d+)/i);
+      if (tokM) ss.metrics.tokenEstimate = parseInt(tokM[1], 10);
+      if (wsM) ss.metrics.workstreamCount = parseInt(wsM[1], 10);
+      if (shockM) ss.metrics.shockScore = parseInt(shockM[1], 10);
     }
 
     if (!ss.vibe && !ss.hotCache) warnings.push('Save-state fields may be incomplete');
@@ -1265,7 +1282,11 @@ ${ss.guardrails || '(not set)'}${antiGoalsBlock}
   KNOWN TRUE: ${ss.truthStatus?.knownTrue || '(not set)'}
   INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
   UNKNOWN: ${ss.truthStatus?.unknown || '(not set)'}
-[THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"
+[THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"${ss.metrics && (ss.metrics.tokenEstimate || ss.metrics.workstreamCount || ss.metrics.shockScore) ? `
+[SESSION METRICS]:
+  Token Estimate: ~${ss.metrics.tokenEstimate || '?'}
+  Workstreams: ${ss.metrics.workstreamCount || '?'}
+  Shock Score: ${ss.metrics.shockScore || '?'}/10` : ''}
 --------------------------`;
 }
 
@@ -1488,6 +1509,27 @@ function renderSaveState() {
       <textarea id="ss-wakeUpInjection" placeholder="The exact first sentence future-Claude should output" rows="2">${esc(data.wakeUpInjection || '')}</textarea>
     </div>`;
 
+    // Session Metrics
+    const metrics = data.metrics || {};
+    html += `<div class="field-group">
+      <label>📊 Session Metrics</label>
+      <div class="settings-desc" style="margin:-4px 0 8px;font-size:11px;opacity:0.5">Research data — logged each session for the paper.</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px;">
+          <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">TOKEN ESTIMATE</label>
+          <input type="number" id="ss-metrics-tokens" value="${metrics.tokenEstimate || ''}" placeholder="~token count of /hibernate output" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">WORKSTREAM COUNT</label>
+          <input type="number" id="ss-metrics-workstreams" value="${metrics.workstreamCount || ''}" placeholder="# active workstreams" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">SHOCK SCORE (1-10)</label>
+          <input type="number" id="ss-metrics-shock" min="1" max="10" value="${metrics.shockScore || ''}" placeholder="1=continuation, 10=cold start" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+        </div>
+      </div>
+    </div>`;
+
     html += `<div class="edit-actions">
       <button class="action-btn btn-primary" onclick="saveSaveStateForm()">Save State</button>`;
     if (entry && hasContent(entry)) {
@@ -1543,6 +1585,16 @@ function renderSaveState() {
       html += `<div class="savestate-section">
         <div class="section-header"><span class="section-icon">💬</span>Wake-Up Injection</div>
         <div class="section-content" style="font-style:italic;">"${esc(ss.wakeUpInjection)}"</div>
+      </div>`;
+    }
+    if (ss.metrics && (ss.metrics.tokenEstimate || ss.metrics.workstreamCount || ss.metrics.shockScore)) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">📊</span>Session Metrics</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--font-mono);font-size:12px;">
+          ${ss.metrics.tokenEstimate ? `<div><span style="opacity:0.5">Tokens:</span> <span style="color:var(--gold-bright)">${ss.metrics.tokenEstimate}</span></div>` : ''}
+          ${ss.metrics.workstreamCount ? `<div><span style="opacity:0.5">Workstreams:</span> <span style="color:var(--gold-bright)">${ss.metrics.workstreamCount}</span></div>` : ''}
+          ${ss.metrics.shockScore ? `<div><span style="opacity:0.5">Shock:</span> <span style="color:var(--gold-bright)">${ss.metrics.shockScore}/10</span></div>` : ''}
+        </div>
       </div>`;
     }
     html += '</div>';
@@ -1856,6 +1908,14 @@ async function saveSaveStateForm() {
   data.truthStatus.inferred = document.getElementById('ss-ts-inferred')?.value || '';
   data.truthStatus.unknown = document.getElementById('ss-ts-unknown')?.value || '';
   data.wakeUpInjection = document.getElementById('ss-wakeUpInjection')?.value || '';
+  // Session Metrics
+  data.metrics = {};
+  const tokVal = document.getElementById('ss-metrics-tokens')?.value;
+  const wsVal = document.getElementById('ss-metrics-workstreams')?.value;
+  const shockVal = document.getElementById('ss-metrics-shock')?.value;
+  if (tokVal) data.metrics.tokenEstimate = parseInt(tokVal, 10);
+  if (wsVal) data.metrics.workstreamCount = parseInt(wsVal, 10);
+  if (shockVal) data.metrics.shockScore = parseInt(shockVal, 10);
   await saveSaveState(selectedDate, data);
   editMode = false;
   editTarget = '';
