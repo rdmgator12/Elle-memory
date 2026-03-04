@@ -117,7 +117,7 @@ Three-layer memory architecture for AI-human partnership continuity.
   - Clipboard fallback if extension unavailable
   - Popup interface for manual payload entry
 - **Architectural Blueprint** (`elles-journal-v2-blueprint.md`)
-- **L3 Schema Spec** (`artificial_hippocampus_L3_schema_v2.1.docx`)
+- **L3 Schema Spec** (`artificial_hippocampus_L3_schema_v2.1.md`)
 - **Dual StorageAdapter** — localStorage (Chrome) + window.storage (Claude artifact)
 
 ---

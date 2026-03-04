@@ -45,69 +45,22 @@ Mitigation: every save-state includes a **Truth Status** field (Known True / Inf
 ### Tech Stack
 
 - **Runtime**: Standalone HTML/CSS/JS (single file, no build step, no framework dependency)
-- **Storage**: `localStorage` for Chrome standalone deployment + `window.storage` API for Claude artifact deployment
+- **Storage**: IndexedDB v2 (primary) → `localStorage` (fallback) → `window.storage` API (Claude artifact mode)
 - **Fonts**: Cormorant Garamond (serif display), JetBrains Mono (monospace UI)
 - **Design Language**: Dark warm palette (#1a1714 base), gold accent (#d4af37), cream text (#e8dcc8)
 - **Target**: Chrome pinned tab (primary), Claude artifact (secondary)
 - **Export**: JSON backup/restore, clipboard copy for all generated payloads
 
-### Dual Storage Adapter
+### Three-Backend Storage Adapter
 
-The app must detect its runtime environment and use the appropriate storage backend:
+> **Updated in v2.3–v2.4:** The original dual adapter (localStorage + window.storage) was replaced with a three-backend chain: IndexedDB v2 (primary) → localStorage (fallback) → window.storage (artifact mode). The adapter auto-detects the best available backend at `init()` time and presents the same `get`/`set`/`delete`/`listKeys` API surface to all calling code.
 
-```javascript
-const StorageAdapter = {
-  isArtifact: typeof window.storage !== 'undefined',
+**IndexedDB schema (v2)** has three object stores:
+- `kv` — canonical key-value store (mirrors the original localStorage pattern)
+- `episodes` — derived indexed store with `multiEntry: true` tag index for O(1) workstream queries
+- `decisions` — derived indexed store with `workstream` and `date` indexes
 
-  async get(key) {
-    if (this.isArtifact) {
-      try {
-        const result = await window.storage.get(key);
-        return result ? JSON.parse(result.value) : null;
-      } catch { return null; }
-    }
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  },
-
-  async set(key, value) {
-    if (this.isArtifact) {
-      try {
-        await window.storage.set(key, JSON.stringify(value));
-        return true;
-      } catch { return false; }
-    }
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-      return true;
-    } catch { return false; }
-  },
-
-  async delete(key) {
-    if (this.isArtifact) {
-      try { await window.storage.delete(key); return true; } catch { return false; }
-    }
-    try { localStorage.removeItem(key); return true; } catch { return false; }
-  },
-
-  async listKeys(prefix) {
-    if (this.isArtifact) {
-      try {
-        const result = await window.storage.list(prefix);
-        return result?.keys || [];
-      } catch { return []; }
-    }
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k.startsWith(prefix)) keys.push(k);
-    }
-    return keys;
-  }
-};
-```
+Data is dual-written: `kv` is canonical, indexed stores are derived and can be rebuilt at any time via "Rebuild Indexes" in Settings. See `StorageAdapter` in the HTML source for the full implementation (~170 lines).
 
 ### Data Model
 
@@ -139,12 +92,25 @@ interface KineticSaveState {
   hotCache: string;          // Highly specific concepts currently "open on the desk"
   zeigarnikTension: string;  // Exact unresolved friction — what were we about to figure out
   guardrails: string;        // What to avoid — no greetings, no recap, stay in frame
-  truthStatus: {
-    knownTrue: string;       // Claims we are confident are verified
-    inferred: string;        // Claims we suspect but haven't confirmed
-    unknown: string;         // Open questions, things to verify
-  };
+  antiGoals: string;         // Session-scoped "do NOT" constraints (added v2.2)
+  decisions: Decision[];     // Structured decision objects (added v2.2)
+  truthStatus: string;       // "Verified: ... Inferred: ... Unknown: ..." (simplified to single string in v2.2)
   wakeUpInjection: string;   // The exact first sentence future-Claude should output
+  tags: string[];            // Workstream tags (auto-derived from decision workstreams)
+  metrics?: {                // Session metrics (added v2.2)
+    tokenEstimate: number;
+    workstreamCount: number;
+    continuityScore: number; // 1-10
+  };
+}
+
+interface Decision {
+  decision: string;          // What was decided
+  rationale: string;         // Why — the reasoning chain
+  alternatives: string[];    // What was considered and rejected
+  reversibility: 'easy' | 'hard' | 'irreversible';
+  confidence: 'high' | 'medium' | 'low';
+  workstream?: string;       // Tag linking to relevant workstream
 }
 ```
 
@@ -158,7 +124,7 @@ Storage key pattern: `savestate:{YYYY-MM-DD}`
 
 Single-page application with a persistent header, tab-based navigation, and a scrollable content area.
 
-### Views (5 total)
+### Views (6 total)
 
 #### 1. Journal View (default)
 
@@ -186,7 +152,7 @@ This is the L3 layer. Accessed via a dedicated tab in the header nav.
 
 #### 3. Morning Briefing View (UPGRADED)
 
-Two sub-modes, toggled by buttons at the top:
+Three sub-modes, toggled by buttons at the top:
 
 **Mode A: Structured Briefing** (existing behavior, enhanced)
 Generates a structured text block pulling:
@@ -247,7 +213,16 @@ All three modes have a **Copy to Clipboard** button with visual confirmation.
 - **NEW**: Cards that also have a save-state get a small "⚡" indicator badge
 - Clicking a card navigates to Journal View for that date
 
-#### 5. Settings View (NEW)
+#### 5. Workstreams View (NEW — added v2.4)
+
+Cross-reference episodes and decisions by workstream tag. Two sub-views:
+
+- **Overview**: Lists all workstream tags with episode count, decision count, and date range. Clicking a workstream navigates to detail view.
+- **Detail**: Drill into a specific workstream showing all associated decisions (with rationale, alternatives, reversibility, confidence) and an episode timeline.
+
+Workstream tags are auto-derived from decision `workstream` fields and manual entry tags.
+
+#### 6. Settings View (NEW)
 
 Accessed via a gear icon in the header.
 
@@ -260,7 +235,7 @@ Accessed via a gear icon in the header.
 ### Header Layout
 
 ```
-[Elle's Journal title + subtitle]    [Journal] [Save-State] [Timeline] [☀ Briefing] [⚙]
+[Elle's Journal title + subtitle]    [Journal] [Save-State] [Timeline] [Workstreams] [☀ Briefing] [⚙]
 ```
 
 - Title: "Elle's Journal" in gold serif
@@ -429,7 +404,7 @@ elles-journal-v2.html
 │   └── .footer (version + entry count)
 └── <script>
     ├── Constants (CATEGORIES, SAVESTATE_FIELDS)
-    ├── StorageAdapter (dual localStorage / window.storage)
+    ├── StorageAdapter (IndexedDB v2 / localStorage / window.storage)
     ├── State management (entries, saveStates, selectedDate, currentView, editMode)
     ├── Utility functions (date helpers, escapeHtml, hasContent)
     ├── Render functions (one per view + sub-components)
@@ -484,6 +459,12 @@ elles-journal-v2.html
 
 - **v1.0** — Elle's Journal: 7-category episodic memory with morning briefing (built March 3, 2026)
 - **v2.0** — Artificial Hippocampus: Unified L2+L3 memory with Kinetic Save-State, Hot Resume, Full Context mode, Settings, dual storage adapter (this blueprint)
+- **v2.1** — Initial public release with Chrome extension and architectural blueprint
+- **v2.2** — Decision Objects, Anti-Goals, zero-touch /hibernate loop, session metrics
+- **v2.3** — IndexedDB three-backend StorageAdapter with atomic migration from localStorage
+- **v2.4** — multiEntry tag indexes, Workstreams Dashboard, briefing workstream filter, dual-write strategy
+
+See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ---
 

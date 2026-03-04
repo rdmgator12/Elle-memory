@@ -138,21 +138,23 @@ Pick up mid-breath.
 ## Architecture
 
 ```
-                    ┌─────────────────────────────┐
-                    │    Elle's Journal v2.4       │
-                    │    (Single HTML File)        │
-                    ├─────────────────────────────┤
-                    │  StorageAdapter              │
-                    │  ├─ localStorage (Chrome)    │
-                    │  └─ window.storage (Artifact)│
-                    ├─────────────────────────────┤
-                    │  Views                       │
-                    │  ├─ Journal (L2 Episodic)    │
-                    │  ├─ Save-State (L3 Kinetic)  │
-                    │  ├─ Timeline (Search/Filter) │
-                    │  ├─ Briefing (Wake Payload)  │
-                    │  └─ Settings (Config/Export) │
-                    └──────────┬──────────────────┘
+                    ┌──────────────────────────────────┐
+                    │    Elle's Journal v2.4            │
+                    │    (Single HTML File)             │
+                    ├──────────────────────────────────┤
+                    │  StorageAdapter                   │
+                    │  ├─ IndexedDB v2 (primary)        │
+                    │  ├─ localStorage (fallback)       │
+                    │  └─ window.storage (artifact)     │
+                    ├──────────────────────────────────┤
+                    │  Views                            │
+                    │  ├─ Journal (L2 Episodic)         │
+                    │  ├─ Save-State (L3 Kinetic)       │
+                    │  ├─ Timeline (Search/Filter)      │
+                    │  ├─ Workstreams (Tag Dashboard)   │
+                    │  ├─ Briefing (Wake Payload)       │
+                    │  └─ Settings (Config/Export)      │
+                    └──────────┬───────────────────────┘
                                │
                     ┌──────────▼──────────────────┐
                     │  Elle Wake Extension         │
