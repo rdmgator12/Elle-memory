@@ -1125,7 +1125,7 @@ function parseSessionCapture(text) {
         dec.rationale = fieldMatch('rationale');
         // Alternatives: parse array or comma-separated
         const altMatch = db.match(/alternatives:\s*\[([^\]]*)\]/i);
-        dec.alternatives = altMatch ? altMatch[1].split(',').map(s => s.replace(/["\s]/g, '').trim()).filter(Boolean) : [];
+        dec.alternatives = altMatch ? altMatch[1].split(',').map(s => s.replace(/"/g, '').trim()).filter(Boolean) : [];
         dec.reversibility = fieldMatch('reversibility');
         dec.confidence = fieldMatch('confidence');
         dec.date = fieldMatch('date');
