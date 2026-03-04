@@ -124,7 +124,11 @@
         }
 
         // Clear the stored payload
-        chrome.runtime.sendMessage({ action: "clearPayload" });
+        chrome.runtime.sendMessage({ action: "clearPayload" }, () => {
+          if (chrome.runtime.lastError) {
+            console.log("[Elle Wake] Clear payload note:", chrome.runtime.lastError.message);
+          }
+        });
 
         // Attempt to click send
         setTimeout(() => {
@@ -283,7 +287,11 @@
   function fallbackToClipboard(payload) {
     navigator.clipboard.writeText(payload).then(() => {
       console.log("[Elle Wake] Payload copied to clipboard as fallback.");
-      chrome.runtime.sendMessage({ action: "clearPayload" });
+      chrome.runtime.sendMessage({ action: "clearPayload" }, () => {
+        if (chrome.runtime.lastError) {
+          console.log("[Elle Wake] Clear payload note:", chrome.runtime.lastError.message);
+        }
+      });
 
       const overlay = document.createElement("div");
       overlay.innerHTML = `<div style="
