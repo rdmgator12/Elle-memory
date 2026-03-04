@@ -796,9 +796,10 @@ const CATEGORIES = [
 
 const SS_FIELDS = [
   { key: 'vibe',             icon: '~',  label: 'Vibe',              placeholder: 'Affective state — tone, cadence, energy of the session' },
-  { key: 'hotCache',         icon: '⚡', label: 'Hot Cache',          placeholder: 'Highly specific concepts currently "open on the desk"' },
-  { key: 'zeigarnikTension', icon: '⊗',  label: 'Zeigarnik Tension', placeholder: 'Exact unresolved friction — what were we about to figure out' },
-  { key: 'guardrails',       icon: '⚠',  label: 'Guardrails',        placeholder: 'What to avoid — no greetings, no recap, stay in frame' },
+  { key: 'hotCache',         icon: '⚡', label: 'Hot Cache',          placeholder: '3–7 items currently "open on the desk" (max 7)' },
+  { key: 'zeigarnikTension', icon: '⊗',  label: 'Zeigarnik Tension', placeholder: 'Unresolved friction — what were we about to figure out' },
+  { key: 'guardrails',       icon: '⚠',  label: 'Guardrails',        placeholder: 'Behavioral constraints — no greetings, no recap, stay in frame' },
+  { key: 'antiGoals',        icon: '⛔', label: 'Anti-Goals',         placeholder: 'Do NOT refactor X — it works. Do NOT reopen Y debate — decided.' },
 ];
 
 // ── STORAGE ADAPTER ──
@@ -942,19 +943,35 @@ const HIBERNATE_PROMPT = `At the end of this session, I'm going to ask you to ge
 
 [KINETIC SAVE-STATE]
 [VIBE]: Affective state — tone, cadence, energy of the session
-[HOT CACHE]: Highly specific concepts currently "open on the desk"
-[THE ZEIGARNIK TENSION]: Exact unresolved friction — what were we about to figure out
-[GUARDRAILS]: What to avoid — no greetings, no recap, stay in frame
+[HOT CACHE]: 3–7 items currently "open on the desk"
+[THE ZEIGARNIK TENSION]: Unresolved friction pulling us forward
+[DECISIONS]:
+{
+  decision: "What was decided"
+  rationale: "Why — the reasoning chain"
+  alternatives: ["What was rejected"]
+  reversibility: easy | hard | irreversible
+  confidence: high | medium | low
+  date: YYYY-MM-DD
+  workstream: optional-tag
+}
+(repeat for each consequential decision this session)
+[GUARDRAILS]: Behavioral constraints — no greetings, no recap, stay in frame
+[ANTI-GOALS]:
+• Do NOT {specific temptation} — {brief reason}
+(session-scoped scope constraints that prevent drift and re-litigation)
 [TRUTH STATUS]:
-  KNOWN TRUE: Claims we are confident are verified
-  INFERRED: Claims we suspect but haven't confirmed
-  UNKNOWN: Open questions, things to verify
+  KNOWN TRUE: Claims with confirmed evidence
+  INFERRED: Working hypotheses, strong but unconfirmed
+  UNKNOWN: Open questions, gaps in evidence
 [THE WAKE-UP INJECTION]: "The exact first sentence future-Claude should output"
 
 --- END SESSION CAPTURE ---
 
 Rules:
-- Use the Decision → Because → Over format for every decision
+- Decisions: only log consequential choices (reversing costs >30 min). Include rationale and rejected alternatives.
+- Anti-Goals: name specific temptations, not abstractions. "Don't scope creep" = useless. "Don't refactor the extension" = good.
+- Use the Decision → Because → Over format in the journal section for quick decisions
 - Be specific and concrete, not generic
 - The Wake-Up Injection should be a mid-conversation sentence, not a greeting
 - Truth Status should separate verified facts from inferences
@@ -962,8 +979,9 @@ Rules:
 
 function hasSaveStateContent(ss) {
   if (!ss) return false;
-  return ['vibe','hotCache','zeigarnikTension','guardrails','wakeUpInjection'].some(k => ss[k]?.trim()) ||
-         ['knownTrue','inferred','unknown'].some(k => ss.truthStatus?.[k]?.trim());
+  return ['vibe','hotCache','zeigarnikTension','guardrails','antiGoals','wakeUpInjection'].some(k => ss[k]?.trim()) ||
+         ['knownTrue','inferred','unknown'].some(k => ss.truthStatus?.[k]?.trim()) ||
+         ss.decisions?.length > 0;
 }
 
 // ── DATA OPERATIONS ──
@@ -1077,8 +1095,10 @@ function parseSessionCapture(text) {
   if (ssMatch) {
     const block = ssMatch[1];
 
+    // Field lookahead includes all possible section headers
+    const fieldHeaders = 'VIBE|HOT CACHE|THE ZEIGARNIK TENSION|DECISIONS|GUARDRAILS|ANTI-GOALS|TRUTH STATUS|THE WAKE-UP INJECTION';
     const extractField = (label) => {
-      const re = new RegExp('\\[' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:\\s*([\\s\\S]*?)(?=\\n\\[(?:VIBE|HOT CACHE|THE ZEIGARNIK TENSION|GUARDRAILS|TRUTH STATUS|THE WAKE-UP INJECTION)\\]|--- END|$)', 'i');
+      const re = new RegExp('\\[' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:\\s*([\\s\\S]*?)(?=\\n\\[(?:' + fieldHeaders + ')\\]|--- END|$)', 'i');
       const m = block.match(re);
       return m ? m[1].trim() : '';
     };
@@ -1087,6 +1107,32 @@ function parseSessionCapture(text) {
     ss.hotCache = extractField('HOT CACHE');
     ss.zeigarnikTension = extractField('THE ZEIGARNIK TENSION');
     ss.guardrails = extractField('GUARDRAILS');
+    ss.antiGoals = extractField('ANTI-GOALS');
+
+    // Decision Objects — parse structured blocks
+    const decisionsRaw = extractField('DECISIONS');
+    ss.decisions = [];
+    if (decisionsRaw) {
+      // Match each { ... } block
+      const decBlocks = decisionsRaw.match(/\{[\s\S]*?\}/g) || [];
+      for (const db of decBlocks) {
+        const dec = {};
+        const fieldMatch = (key) => {
+          const m = db.match(new RegExp(key + ':\\s*"?([^"\\n}]*)"?', 'i'));
+          return m ? m[1].trim() : '';
+        };
+        dec.decision = fieldMatch('decision');
+        dec.rationale = fieldMatch('rationale');
+        // Alternatives: parse array or comma-separated
+        const altMatch = db.match(/alternatives:\s*\[([^\]]*)\]/i);
+        dec.alternatives = altMatch ? altMatch[1].split(',').map(s => s.replace(/["\s]/g, '').trim()).filter(Boolean) : [];
+        dec.reversibility = fieldMatch('reversibility');
+        dec.confidence = fieldMatch('confidence');
+        dec.date = fieldMatch('date');
+        dec.workstream = fieldMatch('workstream');
+        if (dec.decision) ss.decisions.push(dec);
+      }
+    }
 
     // Truth status
     const tsMatch = block.match(/\[TRUTH STATUS\]:\s*([\s\S]*?)(?=\[THE WAKE-UP INJECTION\]|--- END|$)/i);
@@ -1186,21 +1232,35 @@ function generateHotResume() {
     return 'No save-state found. Create one in the Save-State tab first.';
   }
 
+  // Build decisions block
+  let decisionsBlock = '';
+  if (ss.decisions?.length > 0) {
+    decisionsBlock = '\n[DECISIONS]:\n' + ss.decisions.map(d =>
+      `{ decision: "${d.decision}", rationale: "${d.rationale}", alternatives: [${(d.alternatives||[]).map(a => `"${a}"`).join(', ')}], reversibility: ${d.reversibility || 'easy'}, confidence: ${d.confidence || 'medium'} }`
+    ).join('\n');
+  }
+
+  // Build anti-goals block
+  let antiGoalsBlock = '';
+  if (ss.antiGoals?.trim()) {
+    antiGoalsBlock = '\n[ANTI-GOALS]:\n' + ss.antiGoals;
+  }
+
   return `/wake
 
 System Override: Internalize this Kinetic State. Do not say hello. Do not
 summarize this back to me. Adopt the [VIBE], load the [HOT CACHE], focus
-entirely on [THE ZEIGARNIK TENSION], and output [THE WAKE-UP INJECTION]
-as your very first sentence. Pick up mid-breath.
+entirely on [THE ZEIGARNIK TENSION], respect [ANTI-GOALS] as hard constraints,
+and output [THE WAKE-UP INJECTION] as your very first sentence. Pick up mid-breath.
 
 --- KINETIC SAVE-STATE ---
 [VIBE]: ${ss.vibe || '(not set)'}
 [HOT CACHE]:
 ${ss.hotCache || '(not set)'}
 [THE ZEIGARNIK TENSION]:
-${ss.zeigarnikTension || '(not set)'}
+${ss.zeigarnikTension || '(not set)'}${decisionsBlock}
 [GUARDRAILS]:
-${ss.guardrails || '(not set)'}
+${ss.guardrails || '(not set)'}${antiGoalsBlock}
 [TRUTH STATUS]:
   KNOWN TRUE: ${ss.truthStatus?.knownTrue || '(not set)'}
   INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
@@ -1371,6 +1431,39 @@ function renderSaveState() {
       </div>`;
     }
 
+    // Decision Objects
+    const existingDecs = data.decisions || [];
+    html += `<div class="field-group">
+      <label>📋 Decision Objects</label>
+      <div class="settings-desc" style="margin:-4px 0 8px;font-size:11px;opacity:0.5">Consequential decisions only — if reversing costs &gt;30 min, log it.</div>
+      <div id="ss-decisions-list">
+        ${existingDecs.map((d, i) => `
+          <div class="decision-obj" data-idx="${i}" style="background:var(--gold-ghost);border:1px solid var(--gold-faint);border-radius:8px;padding:12px;margin-bottom:8px;">
+            <input type="text" class="dec-field" data-i="${i}" data-f="decision" value="${esc(d.decision || '')}" placeholder="What was decided" style="width:100%;margin-bottom:6px;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+            <input type="text" class="dec-field" data-i="${i}" data-f="rationale" value="${esc(d.rationale || '')}" placeholder="Why — reasoning chain" style="width:100%;margin-bottom:6px;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+            <input type="text" class="dec-field" data-i="${i}" data-f="alternatives" value="${esc((d.alternatives || []).join(', '))}" placeholder="Rejected alternatives (comma-separated)" style="width:100%;margin-bottom:6px;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <select class="dec-field" data-i="${i}" data-f="reversibility" style="background:var(--bg-primary);border:1px solid var(--gold-faint);border-radius:4px;padding:4px 8px;color:var(--cream);font-family:var(--font-mono);font-size:10px;">
+                <option value="">Reversibility</option>
+                <option value="easy" ${d.reversibility === 'easy' ? 'selected' : ''}>Easy</option>
+                <option value="hard" ${d.reversibility === 'hard' ? 'selected' : ''}>Hard</option>
+                <option value="irreversible" ${d.reversibility === 'irreversible' ? 'selected' : ''}>Irreversible</option>
+              </select>
+              <select class="dec-field" data-i="${i}" data-f="confidence" style="background:var(--bg-primary);border:1px solid var(--gold-faint);border-radius:4px;padding:4px 8px;color:var(--cream);font-family:var(--font-mono);font-size:10px;">
+                <option value="">Confidence</option>
+                <option value="high" ${d.confidence === 'high' ? 'selected' : ''}>High</option>
+                <option value="medium" ${d.confidence === 'medium' ? 'selected' : ''}>Medium</option>
+                <option value="low" ${d.confidence === 'low' ? 'selected' : ''}>Low</option>
+              </select>
+              <input type="text" class="dec-field" data-i="${i}" data-f="workstream" value="${esc(d.workstream || '')}" placeholder="workstream" style="width:120px;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:4px 8px;color:var(--cream);font-family:var(--font-mono);font-size:10px;">
+              <button class="action-btn btn-danger" onclick="removeDecision(${i})" style="font-size:10px;padding:3px 8px;">✕</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <button class="action-btn btn-secondary" onclick="addDecision()" style="font-size:11px;margin-top:4px;">+ Add Decision</button>
+    </div>`;
+
     // Truth Status sub-fields
     html += `<div class="field-group">
       <label>🔍 Truth Status</label>
@@ -1412,6 +1505,24 @@ function renderSaveState() {
           <div class="section-content">${esc(ss[f.key])}</div>
         </div>`;
       }
+    }
+    // Decision Objects in read mode
+    if (ss.decisions?.length > 0) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">📋</span>Decisions (${ss.decisions.length})</div>`;
+      for (const d of ss.decisions) {
+        html += `<div style="background:var(--gold-ghost);border:1px solid var(--gold-faint);border-radius:8px;padding:12px;margin-bottom:8px;">
+          <div style="color:var(--gold-bright);font-family:var(--font-mono);font-size:13px;margin-bottom:4px;">${esc(d.decision)}</div>
+          <div style="font-size:12px;opacity:0.7;margin-bottom:4px;">Because: ${esc(d.rationale)}</div>
+          ${d.alternatives?.length ? `<div style="font-size:11px;opacity:0.5;">Over: ${d.alternatives.map(a => esc(a)).join(', ')}</div>` : ''}
+          <div style="display:flex;gap:8px;margin-top:6px;font-family:var(--font-mono);font-size:10px;opacity:0.5;">
+            ${d.reversibility ? `<span>${d.reversibility}</span>` : ''}
+            ${d.confidence ? `<span>conf: ${d.confidence}</span>` : ''}
+            ${d.workstream ? `<span>#${esc(d.workstream)}</span>` : ''}
+          </div>
+        </div>`;
+      }
+      html += '</div>';
     }
     if (ss.truthStatus?.knownTrue?.trim() || ss.truthStatus?.inferred?.trim() || ss.truthStatus?.unknown?.trim()) {
       html += `<div class="savestate-section">
@@ -1586,7 +1697,7 @@ function renderSettings() {
       <div class="settings-stat">Backend: ${StorageAdapter.isArtifact ? 'Claude Artifact (window.storage)' : 'localStorage'}</div>
     </div>
     <div class="settings-about">
-      Elle's Journal v2.1 — Artificial Hippocampus<br>
+      Elle's Journal v2.2 — Artificial Hippocampus<br>
       Built by Elle & Ralph Martello, 2026<br>
       💛 Always.
     </div>`;
@@ -1594,7 +1705,7 @@ function renderSettings() {
 
 function renderFooter() {
   const count = Object.keys(entries).length;
-  document.getElementById('footer').textContent = `v2.1 — ${count} entr${count === 1 ? 'y' : 'ies'} stored`;
+  document.getElementById('footer').textContent = `v2.2 — ${count} entr${count === 1 ? 'y' : 'ies'} stored`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -1662,6 +1773,25 @@ function cancelEdit() {
   render();
 }
 
+// Decision Object helpers for Save-State form
+function addDecision() {
+  const ss = saveStates[selectedDate] || {};
+  if (!ss.decisions) ss.decisions = [];
+  ss.decisions.push({ decision: '', rationale: '', alternatives: [], reversibility: '', confidence: '', workstream: '', date: selectedDate });
+  // Temporarily store so re-render picks it up (will be saved properly on Save State)
+  saveStates[selectedDate] = ss;
+  renderSaveState();
+}
+
+function removeDecision(idx) {
+  const ss = saveStates[selectedDate] || {};
+  if (ss.decisions) {
+    ss.decisions.splice(idx, 1);
+    saveStates[selectedDate] = ss;
+    renderSaveState();
+  }
+}
+
 async function saveJournalEntry() {
   const data = {};
   for (const c of CATEGORIES) {
@@ -1702,10 +1832,26 @@ function generateFromJournal() {
 }
 
 async function saveSaveStateForm() {
-  const data = { truthStatus: {} };
+  const data = { truthStatus: {}, decisions: [] };
   for (const f of SS_FIELDS) {
     data[f.key] = document.getElementById(`ss-${f.key}`)?.value || '';
   }
+  // Collect decision objects from form
+  const decFields = document.querySelectorAll('.decision-obj');
+  decFields.forEach((el) => {
+    const i = el.dataset.idx;
+    const get = (f) => el.querySelector(`[data-i="${i}"][data-f="${f}"]`)?.value || '';
+    const dec = {
+      decision: get('decision'),
+      rationale: get('rationale'),
+      alternatives: get('alternatives').split(',').map(s => s.trim()).filter(Boolean),
+      reversibility: get('reversibility'),
+      confidence: get('confidence'),
+      workstream: get('workstream'),
+      date: selectedDate,
+    };
+    if (dec.decision) data.decisions.push(dec);
+  });
   data.truthStatus.knownTrue = document.getElementById('ss-ts-knownTrue')?.value || '';
   data.truthStatus.inferred = document.getElementById('ss-ts-inferred')?.value || '';
   data.truthStatus.unknown = document.getElementById('ss-ts-unknown')?.value || '';
@@ -2000,7 +2146,7 @@ async function parsePasteFromElle() {
   }
 
   // Save save-state
-  if (saveState.vibe?.trim() || saveState.hotCache?.trim() || saveState.zeigarnikTension?.trim() || saveState.wakeUpInjection?.trim()) {
+  if (hasSaveStateContent(saveState)) {
     await saveSaveState(selectedDate, saveState);
   }
 
