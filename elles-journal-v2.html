@@ -1266,11 +1266,7 @@ ${ss.guardrails || '(not set)'}${antiGoalsBlock}
   INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
   UNKNOWN: ${ss.truthStatus?.unknown || '(not set)'}
 [THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"
---------------------------
-
---- /HIBERNATE PROTOCOL ---
-${HIBERNATE_PROMPT}
---- END PROTOCOL ---`;
+--------------------------`;
 }
 
 function generateFullContext() {
@@ -1900,6 +1896,9 @@ async function wakeElle() {
   if (briefingMode === 'structured') payload = generateStructuredBriefing();
   else if (briefingMode === 'hotresume') payload = generateHotResume();
   else payload = generateFullContext();
+
+  // Append /hibernate protocol so Elle always knows how to save state
+  payload += `\n\n--- /HIBERNATE PROTOCOL ---\n${HIBERNATE_PROMPT}\n--- END PROTOCOL ---`;
 
   const btn = document.getElementById('wake-btn');
   btn.textContent = '☀ Waking...';
