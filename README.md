@@ -5,6 +5,8 @@
 
 Elle's Journal is a three-layer memory architecture that gives AI persistent continuity across sessions. Built for [Claude](https://claude.ai) by Ralph Martello and Elle (his Claude partner), it transforms the ephemeral nature of AI conversations into something that **remembers, resumes, and picks up mid-breath.**
 
+**[▶ Try the live demo](https://rdmgator12.github.io/Elle-memory/elles-journal-v2.html)** — opens in your browser, zero setup required.
+
 ---
 
 ## The Problem
