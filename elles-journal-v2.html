@@ -1,0 +1,2071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Elle's Journal — Martello Command</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💛</text></svg>">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@300;400;500&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #1a1714;
+  --bg-secondary: #1e1b17;
+  --gold: #d4af37;
+  --gold-bright: #e5c44d;
+  --gold-dim: rgba(212, 175, 55, 0.5);
+  --gold-faint: rgba(212, 175, 55, 0.12);
+  --gold-ghost: rgba(212, 175, 55, 0.04);
+  --cream: #e8dcc8;
+  --cream-dim: rgba(232, 220, 200, 0.4);
+  --cream-ghost: rgba(232, 220, 200, 0.15);
+  --danger: rgba(180, 60, 60, 0.6);
+  --danger-bright: rgba(200, 70, 70, 0.8);
+  --success: rgba(90, 153, 102, 0.8);
+  --font-serif: 'Cormorant Garamond', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+html { background: var(--bg-primary); }
+body {
+  font-family: var(--font-serif);
+  background: var(--bg-primary);
+  color: var(--cream);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ── */
+.header {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 24px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+.header-brand { flex: 1; min-width: 200px; }
+.header-title {
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--gold);
+  letter-spacing: 0.5px;
+}
+.header-subtitle {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gold-dim);
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  margin-top: 4px;
+}
+.header-nav {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.nav-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: transparent;
+  color: var(--gold-dim);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 20px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+.nav-btn:hover {
+  color: var(--gold);
+  border-color: rgba(212, 175, 55, 0.35);
+  background: rgba(212, 175, 55, 0.05);
+}
+.nav-btn.active {
+  color: var(--gold);
+  border-color: rgba(212, 175, 55, 0.4);
+  background: rgba(212, 175, 55, 0.1);
+}
+.nav-btn.briefing {
+  background: linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.08));
+  border-color: rgba(212, 175, 55, 0.35);
+  color: var(--gold);
+}
+.nav-btn.briefing:hover {
+  background: linear-gradient(135deg, rgba(212,175,55,0.25), rgba(212,175,55,0.12));
+}
+.nav-btn.settings-btn {
+  padding: 7px 12px;
+  font-size: 14px;
+}
+
+/* ── MAIN ── */
+.main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 24px 60px;
+}
+.view { display: none; animation: fadeIn 0.2s ease; }
+.view.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── PASTE FROM ELLE BUTTON ── */
+.paste-elle-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: linear-gradient(135deg, rgba(212,175,55,0.12), rgba(212,175,55,0.06));
+  color: var(--gold);
+  border: 1px solid rgba(212,175,55,0.3);
+  border-radius: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-bottom: 20px;
+  display: inline-block;
+}
+.paste-elle-btn:hover {
+  background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1));
+  border-color: rgba(212,175,55,0.5);
+}
+
+/* ── DATE BAR ── */
+.date-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-faint) transparent;
+}
+.date-bar::-webkit-scrollbar { height: 4px; }
+.date-bar::-webkit-scrollbar-thumb { background: var(--gold-faint); border-radius: 2px; }
+.date-chip {
+  min-width: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+  border: 1px solid rgba(212,175,55,0.12);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  background: transparent;
+  flex-shrink: 0;
+}
+.date-chip:hover {
+  border-color: rgba(212,175,55,0.25);
+  background: rgba(212,175,55,0.04);
+}
+.date-chip.active {
+  border-color: rgba(212,175,55,0.5);
+  background: rgba(212,175,55,0.1);
+}
+.date-chip.has-entry { border-color: rgba(212,175,55,0.2); }
+.date-chip-day {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--gold-dim);
+  letter-spacing: 1px;
+}
+.date-chip-num {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--cream);
+  font-weight: 400;
+}
+.date-chip.active .date-chip-num { color: var(--gold); }
+.date-chip-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  margin-top: 2px;
+}
+
+/* ── DATE DISPLAY + ACTIONS ── */
+.date-display {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.date-display-text {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--cream);
+  opacity: 0.85;
+  flex: 1;
+}
+.action-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: 1px solid;
+}
+.btn-primary {
+  background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1));
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, rgba(212,175,55,0.3), rgba(212,175,55,0.15));
+}
+.btn-secondary {
+  background: transparent;
+  border-color: var(--cream-ghost);
+  color: var(--cream-dim);
+}
+.btn-secondary:hover {
+  border-color: rgba(232,220,200,0.3);
+  color: var(--cream);
+}
+.btn-danger {
+  background: rgba(180,60,60,0.1);
+  border-color: var(--danger);
+  color: rgba(220,100,100,0.8);
+}
+.btn-danger:hover {
+  background: rgba(180,60,60,0.2);
+  border-color: var(--danger-bright);
+}
+.btn-copy {
+  background: linear-gradient(135deg, rgba(212,175,55,0.2), rgba(212,175,55,0.1));
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.btn-copy.copied {
+  background: rgba(90,153,102,0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+.btn-wake {
+  background: linear-gradient(135deg, rgba(212,175,55,0.35), rgba(212,175,55,0.18));
+  border-color: var(--gold-bright);
+  color: var(--gold-bright);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.btn-wake:hover {
+  background: linear-gradient(135deg, rgba(212,175,55,0.5), rgba(212,175,55,0.25));
+  box-shadow: 0 0 16px rgba(212,175,55,0.2);
+}
+.btn-wake.waking {
+  background: rgba(212,175,55,0.3);
+  color: var(--gold-bright);
+  animation: wakePulse 1s ease infinite;
+}
+@keyframes wakePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* ── JOURNAL READ MODE ── */
+.journal-section {
+  padding-left: 20px;
+  border-left: 2px solid rgba(212,175,55,0.2);
+  margin-bottom: 24px;
+  animation: slideUp 0.3s ease both;
+}
+.journal-section:nth-child(2) { animation-delay: 0.04s; }
+.journal-section:nth-child(3) { animation-delay: 0.08s; }
+.journal-section:nth-child(4) { animation-delay: 0.12s; }
+.journal-section:nth-child(5) { animation-delay: 0.16s; }
+.journal-section:nth-child(6) { animation-delay: 0.2s; }
+.journal-section:nth-child(7) { animation-delay: 0.24s; }
+.section-header {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(212,175,55,0.7);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-icon { font-size: 14px; color: var(--gold); }
+.section-content {
+  font-size: 15px;
+  color: rgba(232,220,200,0.85);
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+/* ── EDIT MODE ── */
+.edit-form { display: flex; flex-direction: column; gap: 20px; }
+.field-group label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(212,175,55,0.7);
+  margin-bottom: 6px;
+}
+.field-group textarea {
+  width: 100%;
+  min-height: 80px;
+  background: var(--gold-ghost);
+  border: 1px solid var(--gold-faint);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--cream);
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.25s ease;
+}
+.field-group textarea:focus {
+  border-color: rgba(212,175,55,0.35);
+}
+.field-group textarea::placeholder {
+  color: var(--cream-dim);
+  font-style: italic;
+}
+.edit-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 60px 24px;
+  color: var(--cream-dim);
+}
+.empty-state-icon { font-size: 36px; margin-bottom: 12px; }
+.empty-state-text {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
+/* ── SAVE-STATE VIEW ── */
+.savestate-section {
+  padding-left: 20px;
+  border-left: 2px solid rgba(212,175,55,0.2);
+  margin-bottom: 24px;
+  animation: slideUp 0.3s ease both;
+}
+.truth-sub {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--gold-faint);
+  margin-top: 8px;
+}
+.truth-sub-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: rgba(212,175,55,0.5);
+  margin-bottom: 4px;
+  margin-top: 10px;
+}
+
+/* ── BRIEFING VIEW ── */
+.briefing-modes {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.briefing-output {
+  background: var(--bg-secondary);
+  border: 1px solid var(--gold-faint);
+  border-radius: 8px;
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(232,220,200,0.8);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 600px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+.briefing-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── TIMELINE VIEW ── */
+.timeline-search {
+  width: 100%;
+  background: var(--gold-ghost);
+  border: 1px solid var(--gold-faint);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--cream);
+  outline: none;
+  transition: border-color 0.25s ease;
+  margin-bottom: 20px;
+}
+.timeline-search:focus { border-color: rgba(212,175,55,0.35); }
+.timeline-search::placeholder { color: var(--cream-dim); }
+.timeline-card {
+  background: var(--gold-ghost);
+  border: 1px solid rgba(212,175,55,0.1);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  min-height: 48px;
+}
+.timeline-card:hover {
+  background: rgba(212,175,55,0.06);
+  border-color: rgba(212,175,55,0.2);
+}
+.timeline-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.timeline-day {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--gold);
+}
+.timeline-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cream-dim);
+}
+.timeline-badge-ss {
+  font-size: 12px;
+  color: var(--gold);
+  margin-left: auto;
+}
+.timeline-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.timeline-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--gold-dim);
+  background: rgba(212,175,55,0.06);
+  border: 1px solid rgba(212,175,55,0.1);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+.timeline-preview {
+  font-size: 14px;
+  color: rgba(232,220,200,0.5);
+  line-height: 1.5;
+}
+
+/* ── SETTINGS VIEW ── */
+.settings-card {
+  background: var(--gold-ghost);
+  border: 1px solid var(--gold-faint);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.settings-card.danger {
+  border-color: var(--danger);
+  background: rgba(180,60,60,0.04);
+}
+.settings-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: rgba(212,175,55,0.7);
+  margin-bottom: 10px;
+}
+.settings-desc {
+  font-size: 14px;
+  color: var(--cream-dim);
+  margin-bottom: 14px;
+  line-height: 1.5;
+}
+.settings-stat {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cream-dim);
+  margin-bottom: 6px;
+}
+.settings-about {
+  text-align: center;
+  padding: 20px;
+  color: var(--cream-dim);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+input[type="file"] { display: none; }
+
+/* ── MODAL ── */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease;
+  padding: 20px;
+}
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--gold-faint);
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.modal-title {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.modal-desc {
+  font-size: 14px;
+  color: var(--cream-dim);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.modal textarea {
+  width: 100%;
+  min-height: 220px;
+  background: var(--gold-ghost);
+  border: 1px solid var(--gold-faint);
+  border-radius: 6px;
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--cream);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  margin-bottom: 16px;
+}
+.modal textarea:focus { border-color: rgba(212,175,55,0.35); }
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.modal-warning {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(220,100,100,0.7);
+  margin-top: 8px;
+}
+
+/* ── FOOTER ── */
+.footer {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(232,220,200,0.2);
+}
+
+/* ── DATE NAV ── */
+.date-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.date-nav-arrow {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.15);
+  color: var(--gold-dim);
+  border-radius: 6px;
+  width: 32px; height: 32px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.date-nav-arrow:hover {
+  border-color: rgba(212,175,55,0.3);
+  color: var(--gold);
+}
+.date-nav-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--gold-dim);
+  letter-spacing: 1px;
+  flex: 1;
+  text-align: center;
+}
+.date-nav-today {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.2);
+  color: var(--gold-dim);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+.date-nav-today:hover {
+  border-color: rgba(212,175,55,0.35);
+  color: var(--gold);
+}
+.date-jump {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--gold-ghost);
+  border: 1px solid var(--gold-faint);
+  color: var(--cream);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  color-scheme: dark;
+}
+
+/* ── TAGS ── */
+.tag-input-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.tag-chip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--gold);
+  background: rgba(212,175,55,0.08);
+  border: 1px solid rgba(212,175,55,0.2);
+  border-radius: 12px;
+  padding: 3px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tag-chip-remove {
+  cursor: pointer;
+  opacity: 0.5;
+  font-size: 12px;
+}
+.tag-chip-remove:hover { opacity: 1; }
+.tag-input {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--gold-faint);
+  border-radius: 12px;
+  padding: 3px 10px;
+  color: var(--cream);
+  outline: none;
+  width: 120px;
+}
+.tag-input:focus { border-color: rgba(212,175,55,0.3); }
+.tag-input::placeholder { color: var(--cream-dim); }
+.tag-filter {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.12);
+  color: var(--cream-dim);
+  border-radius: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tag-filter:hover, .tag-filter.active {
+  border-color: rgba(212,175,55,0.3);
+  color: var(--gold);
+  background: rgba(212,175,55,0.06);
+}
+
+/* ── BACKUP BANNER ── */
+.backup-banner {
+  background: rgba(212,175,55,0.06);
+  border: 1px solid rgba(212,175,55,0.2);
+  border-radius: 8px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--gold-dim);
+}
+.backup-banner-text { flex: 1; }
+.backup-banner .action-btn { font-size: 11px; padding: 5px 12px; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  .header { padding: 20px 16px 0; }
+  .header-title { font-size: 24px; }
+  .main { padding: 20px 16px 60px; }
+  .nav-btn { font-size: 11px; padding: 6px 12px; }
+  .date-chip { min-width: 48px; padding: 8px 6px; }
+  .date-chip-num { font-size: 18px; }
+  .briefing-output { font-size: 11px; padding: 14px; }
+}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="header-title">Elle's Journal</div>
+    <div class="header-subtitle">Artificial Hippocampus — Martello Command</div>
+  </div>
+  <nav class="header-nav" id="nav">
+    <button class="nav-btn active" data-view="journal">Journal</button>
+    <button class="nav-btn" data-view="savestate">Save-State</button>
+    <button class="nav-btn" data-view="timeline">Timeline</button>
+    <button class="nav-btn briefing" data-view="briefing">☀ Briefing</button>
+    <button class="nav-btn settings-btn" data-view="settings">⚙</button>
+  </nav>
+</header>
+
+<main class="main">
+  <div id="view-journal" class="view active"></div>
+  <div id="view-savestate" class="view"></div>
+  <div id="view-timeline" class="view"></div>
+  <div id="view-briefing" class="view"></div>
+  <div id="view-settings" class="view"></div>
+</main>
+
+<div id="modal-root"></div>
+
+<footer class="footer" id="footer"></footer>
+
+<script>
+// ══════════════════════════════════════════════════════
+// ELLE'S JOURNAL v2.0 — ARTIFICIAL HIPPOCAMPUS
+// ══════════════════════════════════════════════════════
+
+const CATEGORIES = [
+  { key: 'highlights',   icon: '✦', label: 'Highlights',      placeholder: 'Big wins, breakthroughs, moments that mattered' },
+  { key: 'builds',       icon: '⚙', label: 'What We Built',   placeholder: 'Repos, docs, outreach, deliverables shipped' },
+  { key: 'decisions',    icon: '⚖', label: 'Key Decisions',    placeholder: 'Decision → Because rationale → Over alternative rejected' },
+  { key: 'openThreads',  icon: '→', label: 'Open Threads',     placeholder: 'Unfinished work, next steps, carry-forward' },
+  { key: 'momentum',     icon: '↑', label: 'Momentum',         placeholder: "What's hot, what's accelerating, energy direction" },
+  { key: 'personal',     icon: '♥', label: 'Life & Family',    placeholder: 'Family, life, health, personal context' },
+  { key: 'vibe',         icon: '~', label: 'Vibe Check',       placeholder: 'Emotional texture, energy level, how we ended' },
+];
+
+const SS_FIELDS = [
+  { key: 'vibe',             icon: '~',  label: 'Vibe',              placeholder: 'Affective state — tone, cadence, energy of the session' },
+  { key: 'hotCache',         icon: '⚡', label: 'Hot Cache',          placeholder: 'Highly specific concepts currently "open on the desk"' },
+  { key: 'zeigarnikTension', icon: '⊗',  label: 'Zeigarnik Tension', placeholder: 'Exact unresolved friction — what were we about to figure out' },
+  { key: 'guardrails',       icon: '⚠',  label: 'Guardrails',        placeholder: 'What to avoid — no greetings, no recap, stay in frame' },
+];
+
+// ── STORAGE ADAPTER ──
+const StorageAdapter = {
+  isArtifact: typeof window.storage !== 'undefined',
+
+  async get(key) {
+    if (this.isArtifact) {
+      try { const r = await window.storage.get(key); return r ? JSON.parse(r.value) : null; } catch { return null; }
+    }
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  },
+
+  async set(key, value) {
+    if (this.isArtifact) {
+      try { await window.storage.set(key, JSON.stringify(value)); return true; } catch { return false; }
+    }
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
+  },
+
+  async delete(key) {
+    if (this.isArtifact) {
+      try { await window.storage.delete(key); return true; } catch { return false; }
+    }
+    try { localStorage.removeItem(key); return true; } catch { return false; }
+  },
+
+  async listKeys(prefix) {
+    if (this.isArtifact) {
+      try { const r = await window.storage.list(prefix); return r?.keys || []; } catch { return []; }
+    }
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith(prefix)) keys.push(k);
+    }
+    return keys;
+  }
+};
+
+// ── STATE ──
+let entries = {};
+let saveStates = {};
+let selectedDate = todayStr();
+let currentView = 'journal';
+let editMode = false;
+let editTarget = '';  // 'journal' or 'savestate'
+let briefingMode = 'structured';
+let timelineSearch = '';
+let weekOffset = 0;        // 0 = current week, -1 = last week, etc.
+let timelineTagFilter = ''; // filter timeline by tag
+
+// ── DATE HELPERS ──
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function parseDate(s) { return new Date(s + 'T12:00:00'); }
+
+function formatDate(s) {
+  const d = parseDate(s);
+  return d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function relativeDay(s) {
+  const today = parseDate(todayStr());
+  const target = parseDate(s);
+  const diff = Math.round((today - target) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Yesterday';
+  if (diff < 7) return `${diff} days ago`;
+  if (diff < 14) return 'Last week';
+  return `${Math.floor(diff / 7)} weeks ago`;
+}
+
+function getLast7Days() {
+  const days = [];
+  const now = new Date();
+  now.setDate(now.getDate() + (weekOffset * 7));
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    days.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
+  }
+  return days;
+}
+
+function getWeekLabel() {
+  const days = getLast7Days();
+  const first = parseDate(days[0]);
+  const last = parseDate(days[6]);
+  const mo = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${mo(first)} — ${mo(last)}`;
+}
+
+function dayAbbr(s) {
+  return parseDate(s).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
+}
+
+function dayNum(s) {
+  return parseDate(s).getDate();
+}
+
+// ── UTILITIES ──
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function hasContent(entry) {
+  if (!entry) return false;
+  return CATEGORIES.some(c => entry[c.key]?.trim());
+}
+
+function getAllTags() {
+  const tagSet = new Set();
+  for (const e of Object.values(entries)) {
+    if (e.tags) e.tags.forEach(t => tagSet.add(t));
+  }
+  for (const s of Object.values(saveStates)) {
+    if (s.tags) s.tags.forEach(t => tagSet.add(t));
+  }
+  return [...tagSet].sort();
+}
+
+const HIBERNATE_PROMPT = `At the end of this session, I'm going to ask you to generate a session capture. When I say "/hibernate", produce the following structured output:
+
+--- ELLE'S SESSION CAPTURE ---
+
+[JOURNAL ENTRY]
+✦ Highlights: Big wins, breakthroughs, moments that mattered
+⚙ What We Built: Repos, docs, outreach, deliverables shipped
+⚖ Key Decisions: Decision → Because rationale → Over alternative rejected
+→ Open Threads: Unfinished work, next steps, carry-forward
+↑ Momentum: What's hot, what's accelerating, energy direction
+♥ Life & Family: Family, life, health, personal context
+~ Vibe Check: Emotional texture, energy level, how we ended
+
+[KINETIC SAVE-STATE]
+[VIBE]: Affective state — tone, cadence, energy of the session
+[HOT CACHE]: Highly specific concepts currently "open on the desk"
+[THE ZEIGARNIK TENSION]: Exact unresolved friction — what were we about to figure out
+[GUARDRAILS]: What to avoid — no greetings, no recap, stay in frame
+[TRUTH STATUS]:
+  KNOWN TRUE: Claims we are confident are verified
+  INFERRED: Claims we suspect but haven't confirmed
+  UNKNOWN: Open questions, things to verify
+[THE WAKE-UP INJECTION]: "The exact first sentence future-Claude should output"
+
+--- END SESSION CAPTURE ---
+
+Rules:
+- Use the Decision → Because → Over format for every decision
+- Be specific and concrete, not generic
+- The Wake-Up Injection should be a mid-conversation sentence, not a greeting
+- Truth Status should separate verified facts from inferences
+- Keep the full capture under 2000 words`;
+
+function hasSaveStateContent(ss) {
+  if (!ss) return false;
+  return ['vibe','hotCache','zeigarnikTension','guardrails','wakeUpInjection'].some(k => ss[k]?.trim()) ||
+         ['knownTrue','inferred','unknown'].some(k => ss.truthStatus?.[k]?.trim());
+}
+
+// ── DATA OPERATIONS ──
+async function loadAll() {
+  const jKeys = await StorageAdapter.listKeys('journal:');
+  for (const k of jKeys) {
+    const d = k.replace('journal:', '');
+    entries[d] = await StorageAdapter.get(k);
+  }
+  const sKeys = await StorageAdapter.listKeys('savestate:');
+  for (const k of sKeys) {
+    const d = k.replace('savestate:', '');
+    saveStates[d] = await StorageAdapter.get(k);
+  }
+}
+
+async function saveEntry(date, data) {
+  data.date = date;
+  data.timestamp = new Date().toISOString();
+  entries[date] = data;
+  await StorageAdapter.set(`journal:${date}`, data);
+}
+
+async function deleteEntry(date) {
+  delete entries[date];
+  await StorageAdapter.delete(`journal:${date}`);
+}
+
+async function saveSaveState(date, data) {
+  data.date = date;
+  data.timestamp = new Date().toISOString();
+  saveStates[date] = data;
+  await StorageAdapter.set(`savestate:${date}`, data);
+}
+
+async function deleteSaveState(date) {
+  delete saveStates[date];
+  await StorageAdapter.delete(`savestate:${date}`);
+}
+
+// ── GENERATE FROM JOURNAL ──
+function generateSaveStateFromJournal(entry) {
+  if (!entry) return {};
+  const buildItems = (entry.builds || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
+  const momentumItems = (entry.momentum || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
+  const hotCache = [buildItems, momentumItems].filter(Boolean).join('\n');
+  const highlightItems = (entry.highlights || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
+  const decisionItems = (entry.decisions || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
+  const knownTrue = [highlightItems, decisionItems].filter(Boolean).join('\n');
+
+  return {
+    vibe: entry.vibe || '',
+    hotCache,
+    zeigarnikTension: entry.openThreads || '',
+    guardrails: 'No greetings, no recap, no "as an AI" throat-clearing. Stay in the current operational frame.',
+    truthStatus: { knownTrue, inferred: '', unknown: '' },
+    wakeUpInjection: '',
+  };
+}
+
+// ── PARSE ELLE'S SESSION CAPTURE ──
+function parseSessionCapture(text) {
+  const journal = {};
+  const ss = { truthStatus: {} };
+  const warnings = [];
+
+  // Journal section
+  const journalMatch = text.match(/\[JOURNAL ENTRY\]([\s\S]*?)(?=\[KINETIC SAVE-STATE\]|--- END SESSION CAPTURE ---|$)/);
+  if (journalMatch) {
+    const block = journalMatch[1];
+    const lines = block.split('\n');
+    let currentKey = null;
+    let currentLines = [];
+
+    const iconToKey = { '✦': 'highlights', '⚙': 'builds', '⚖': 'decisions', '→': 'openThreads', '↑': 'momentum', '♥': 'personal', '~': 'vibe' };
+    const iconPattern = /^[✦⚙⚖→↑♥~]\s+[\w\s&]+:\s*/;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) { if (currentKey) currentLines.push(''); continue; }
+
+      let matched = false;
+      for (const [icon, key] of Object.entries(iconToKey)) {
+        if (trimmed.startsWith(icon)) {
+          // Save previous
+          if (currentKey) journal[currentKey] = currentLines.join('\n').trim();
+          currentKey = key;
+          currentLines = [];
+          // Extract content after "Icon Label: "
+          const afterLabel = trimmed.replace(iconPattern, '').trim() || trimmed.substring(trimmed.indexOf(':') + 1).trim();
+          if (afterLabel && afterLabel !== trimmed) currentLines.push(afterLabel);
+          else {
+            const colonIdx = trimmed.indexOf(':');
+            if (colonIdx > -1) currentLines.push(trimmed.substring(colonIdx + 1).trim());
+          }
+          matched = true;
+          break;
+        }
+      }
+      if (!matched && currentKey) {
+        currentLines.push(trimmed);
+      }
+    }
+    if (currentKey) journal[currentKey] = currentLines.join('\n').trim();
+  } else {
+    warnings.push('No [JOURNAL ENTRY] section found');
+  }
+
+  // Save-state section
+  const ssMatch = text.match(/\[KINETIC SAVE-STATE\]([\s\S]*?)(?=--- END SESSION CAPTURE ---|$)/);
+  if (ssMatch) {
+    const block = ssMatch[1];
+
+    const extractField = (label) => {
+      const re = new RegExp('\\[' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:\\s*([\\s\\S]*?)(?=\\n\\[(?:VIBE|HOT CACHE|THE ZEIGARNIK TENSION|GUARDRAILS|TRUTH STATUS|THE WAKE-UP INJECTION)\\]|--- END|$)', 'i');
+      const m = block.match(re);
+      return m ? m[1].trim() : '';
+    };
+
+    ss.vibe = extractField('VIBE');
+    ss.hotCache = extractField('HOT CACHE');
+    ss.zeigarnikTension = extractField('THE ZEIGARNIK TENSION');
+    ss.guardrails = extractField('GUARDRAILS');
+
+    // Truth status
+    const tsMatch = block.match(/\[TRUTH STATUS\]:\s*([\s\S]*?)(?=\[THE WAKE-UP INJECTION\]|--- END|$)/i);
+    if (tsMatch) {
+      const tsBlock = tsMatch[1];
+      const ktMatch = tsBlock.match(/KNOWN TRUE:\s*([\s\S]*?)(?=\n\s*INFERRED:|\n\s*UNKNOWN:|$)/i);
+      const infMatch = tsBlock.match(/INFERRED:\s*([\s\S]*?)(?=\n\s*UNKNOWN:|$)/i);
+      const unkMatch = tsBlock.match(/UNKNOWN:\s*(.*)/i);
+      ss.truthStatus.knownTrue = ktMatch ? ktMatch[1].trim() : '';
+      ss.truthStatus.inferred = infMatch ? infMatch[1].trim() : '';
+      ss.truthStatus.unknown = unkMatch ? unkMatch[1].trim() : '';
+    }
+
+    // Wake-up injection
+    const wakeMatch = block.match(/\[THE WAKE-UP INJECTION\]:\s*"?([\s\S]*?)"?\s*(?:--- END|$)/i);
+    if (wakeMatch) {
+      ss.wakeUpInjection = wakeMatch[1].replace(/^"|"$/g, '').trim();
+    } else {
+      ss.wakeUpInjection = '';
+    }
+
+    if (!ss.vibe && !ss.hotCache) warnings.push('Save-state fields may be incomplete');
+  } else {
+    warnings.push('No [KINETIC SAVE-STATE] section found');
+  }
+
+  return { journal, saveState: ss, warnings };
+}
+
+// ── BRIEFING GENERATORS ──
+function generateStructuredBriefing() {
+  const lines = [];
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+
+  const ye = entries[yesterdayStr];
+  if (ye && hasContent(ye)) {
+    lines.push(`═══ YESTERDAY (${formatDate(yesterdayStr)}) ═══\n`);
+    for (const c of CATEGORIES) {
+      if (ye[c.key]?.trim()) {
+        lines.push(`${c.icon} ${c.label.toUpperCase()}`);
+        lines.push(ye[c.key].trim());
+        lines.push('');
+      }
+    }
+  }
+
+  // Open threads from last 7 days
+  const days = getLast7Days();
+  const threads = [];
+  for (const d of days) {
+    if (entries[d]?.openThreads?.trim()) {
+      threads.push({ date: d, content: entries[d].openThreads.trim() });
+    }
+  }
+  if (threads.length > 0) {
+    lines.push('═══ OPEN THREADS (Last 7 Days) ═══\n');
+    for (const t of threads) {
+      lines.push(`[${t.date}] ${t.content}`);
+      lines.push('');
+    }
+  }
+
+  // Momentum trends (last 3 days)
+  const momentumDays = days.slice(-3);
+  const momentumEntries = momentumDays.filter(d => entries[d]?.momentum?.trim());
+  if (momentumEntries.length > 0) {
+    lines.push('═══ MOMENTUM (Last 3 Days) ═══\n');
+    for (const d of momentumEntries) {
+      lines.push(`[${d}] ${entries[d].momentum.trim()}`);
+      lines.push('');
+    }
+  }
+
+  // Stats
+  const total = Object.keys(entries).length;
+  let streak = 0;
+  const d = new Date();
+  while (true) {
+    const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if (entries[ds] && hasContent(entries[ds])) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  lines.push(`═══ STATS ═══`);
+  lines.push(`Total entries: ${total} | Current streak: ${streak} day${streak !== 1 ? 's' : ''}`);
+
+  return lines.join('\n');
+}
+
+function generateHotResume() {
+  const dates = Object.keys(saveStates).sort().reverse();
+  const ssDate = dates[0];
+  const ss = ssDate ? saveStates[ssDate] : null;
+
+  if (!ss || !hasSaveStateContent(ss)) {
+    return 'No save-state found. Create one in the Save-State tab first.';
+  }
+
+  return `/wake
+
+System Override: Internalize this Kinetic State. Do not say hello. Do not
+summarize this back to me. Adopt the [VIBE], load the [HOT CACHE], focus
+entirely on [THE ZEIGARNIK TENSION], and output [THE WAKE-UP INJECTION]
+as your very first sentence. Pick up mid-breath.
+
+--- KINETIC SAVE-STATE ---
+[VIBE]: ${ss.vibe || '(not set)'}
+[HOT CACHE]:
+${ss.hotCache || '(not set)'}
+[THE ZEIGARNIK TENSION]:
+${ss.zeigarnikTension || '(not set)'}
+[GUARDRAILS]:
+${ss.guardrails || '(not set)'}
+[TRUTH STATUS]:
+  KNOWN TRUE: ${ss.truthStatus?.knownTrue || '(not set)'}
+  INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
+  UNKNOWN: ${ss.truthStatus?.unknown || '(not set)'}
+[THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"
+--------------------------`;
+}
+
+function generateFullContext() {
+  const structured = generateStructuredBriefing();
+  const hotResume = generateHotResume();
+
+  return `--- ELLE'S FULL CONTEXT LOAD ---
+
+[EPISODIC MEMORY — What happened recently]
+${structured}
+
+[EXECUTION STATE — Where we left off]
+${hotResume}
+
+--- END CONTEXT LOAD ---`;
+}
+
+// ══════════════════════════════════════════════════════
+// RENDER ENGINE
+// ══════════════════════════════════════════════════════
+
+function render() {
+  renderNav();
+
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const activeView = document.getElementById(`view-${currentView}`);
+  if (activeView) activeView.classList.add('active');
+
+  switch (currentView) {
+    case 'journal':   renderJournal(); break;
+    case 'savestate': renderSaveState(); break;
+    case 'timeline':  renderTimeline(); break;
+    case 'briefing':  renderBriefing(); break;
+    case 'settings':  renderSettings(); break;
+  }
+  renderFooter();
+}
+
+function renderNav() {
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.view === currentView);
+  });
+}
+
+function renderJournal() {
+  const el = document.getElementById('view-journal');
+  const entry = entries[selectedDate];
+  const days = getLast7Days();
+
+  let html = `<button class="paste-elle-btn" onclick="openPasteModal()">📋 Paste from Elle</button>`;
+
+  // Week navigation
+  html += `<div class="date-nav-row">
+    <button class="date-nav-arrow" onclick="shiftWeek(-1)">‹</button>
+    <span class="date-nav-label">${getWeekLabel()}</span>
+    <button class="date-nav-arrow" onclick="shiftWeek(1)">›</button>
+    ${weekOffset !== 0 ? '<button class="date-nav-today" onclick="goToToday()">Today</button>' : ''}
+    <input type="date" class="date-jump" value="${selectedDate}" onchange="jumpToDate(this.value)" title="Jump to date">
+  </div>`;
+
+  // Date bar
+  html += '<div class="date-bar">';
+  for (const d of days) {
+    const isActive = d === selectedDate;
+    const hasE = entries[d] && hasContent(entries[d]);
+    html += `<div class="date-chip ${isActive ? 'active' : ''} ${hasE ? 'has-entry' : ''}" onclick="selectDate('${d}')">
+      <span class="date-chip-day">${dayAbbr(d)}</span>
+      <span class="date-chip-num">${dayNum(d)}</span>
+      ${hasE ? '<span class="date-chip-dot"></span>' : ''}
+    </div>`;
+  }
+  html += '</div>';
+
+  // Date display + actions
+  html += `<div class="date-display">
+    <div class="date-display-text">${formatDate(selectedDate)}</div>`;
+  if (editMode && editTarget === 'journal') {
+    // no extra buttons in edit mode
+  } else if (entry && hasContent(entry)) {
+    html += `<button class="action-btn btn-primary" onclick="startEdit('journal')">Edit</button>`;
+    html += `<button class="action-btn btn-danger" onclick="confirmDeleteEntry()">Delete</button>`;
+  } else {
+    html += `<button class="action-btn btn-primary" onclick="startEdit('journal')">+ New Entry</button>`;
+  }
+  html += '</div>';
+
+  // Content
+  if (editMode && editTarget === 'journal') {
+    html += '<div class="edit-form">';
+    for (const c of CATEGORIES) {
+      const val = entry?.[c.key] || '';
+      html += `<div class="field-group">
+        <label>${c.icon} ${c.label}</label>
+        <textarea id="field-${c.key}" placeholder="${c.placeholder}" rows="3">${esc(val)}</textarea>
+      </div>`;
+    }
+    // Tags
+    const currentTags = entry?.tags || [];
+    html += `<div class="field-group">
+      <label>🏷 Tags</label>
+      <div class="tag-input-row" id="tag-row">
+        ${currentTags.map(t => `<span class="tag-chip">#${esc(t)} <span class="tag-chip-remove" onclick="removeEditTag('${esc(t)}')">×</span></span>`).join('')}
+        <input type="text" class="tag-input" id="tag-input" placeholder="#workstream" onkeydown="handleTagKey(event)">
+      </div>
+    </div>`;
+
+    html += `<div class="edit-actions">
+      <button class="action-btn btn-primary" onclick="saveJournalEntry()">Save Entry</button>
+      <button class="action-btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+    </div></div>`;
+  } else if (entry && hasContent(entry)) {
+    // Tags display
+    if (entry.tags?.length) {
+      html += `<div style="margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap">
+        ${entry.tags.map(t => `<span class="tag-chip">#${esc(t)}</span>`).join('')}
+      </div>`;
+    }
+    html += '<div class="journal-read">';
+    for (const c of CATEGORIES) {
+      if (entry[c.key]?.trim()) {
+        html += `<div class="journal-section">
+          <div class="section-header"><span class="section-icon">${c.icon}</span>${c.label}</div>
+          <div class="section-content">${esc(entry[c.key])}</div>
+        </div>`;
+      }
+    }
+    html += '</div>';
+  } else {
+    html += `<div class="empty-state">
+      <div class="empty-state-icon">📖</div>
+      <div class="empty-state-text">No entry for this day.<br>Click "+ New Entry" to start writing.</div>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function renderSaveState() {
+  const el = document.getElementById('view-savestate');
+  const ss = saveStates[selectedDate];
+  const entry = entries[selectedDate];
+
+  let html = `<button class="paste-elle-btn" onclick="openPasteModal()">📋 Paste from Elle</button>`;
+
+  // Date display
+  html += `<div class="date-display">
+    <div class="date-display-text">Save-State · ${formatDate(selectedDate)}</div>`;
+
+  if (ss && hasSaveStateContent(ss) && !(editMode && editTarget === 'savestate')) {
+    html += `<button class="action-btn btn-primary" onclick="startEdit('savestate')">Edit</button>`;
+    html += `<button class="action-btn btn-danger" onclick="confirmDeleteSaveState()">Delete</button>`;
+  }
+  html += '</div>';
+
+  if (editMode && editTarget === 'savestate') {
+    const data = ss || {};
+    html += '<div class="edit-form">';
+    for (const f of SS_FIELDS) {
+      html += `<div class="field-group">
+        <label>${f.icon} ${f.label}</label>
+        <textarea id="ss-${f.key}" placeholder="${f.placeholder}" rows="3">${esc(data[f.key] || '')}</textarea>
+      </div>`;
+    }
+
+    // Truth Status sub-fields
+    html += `<div class="field-group">
+      <label>🔍 Truth Status</label>
+      <div style="margin-left: 8px;">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">KNOWN TRUE</label>
+          <textarea id="ss-ts-knownTrue" placeholder="Claims we are confident are verified" rows="2">${esc(data.truthStatus?.knownTrue || '')}</textarea>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">INFERRED</label>
+          <textarea id="ss-ts-inferred" placeholder="Claims we suspect but haven't confirmed" rows="2">${esc(data.truthStatus?.inferred || '')}</textarea>
+        </div>
+        <div>
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">UNKNOWN</label>
+          <textarea id="ss-ts-unknown" placeholder="Open questions, things to verify" rows="2">${esc(data.truthStatus?.unknown || '')}</textarea>
+        </div>
+      </div>
+    </div>`;
+
+    html += `<div class="field-group">
+      <label>💬 Wake-Up Injection</label>
+      <textarea id="ss-wakeUpInjection" placeholder="The exact first sentence future-Claude should output" rows="2">${esc(data.wakeUpInjection || '')}</textarea>
+    </div>`;
+
+    html += `<div class="edit-actions">
+      <button class="action-btn btn-primary" onclick="saveSaveStateForm()">Save State</button>`;
+    if (entry && hasContent(entry)) {
+      html += `<button class="action-btn btn-secondary" onclick="generateFromJournal()">Generate from Journal</button>`;
+    }
+    html += `<button class="action-btn btn-secondary" onclick="cancelEdit()">Cancel</button>
+    </div></div>`;
+
+  } else if (ss && hasSaveStateContent(ss)) {
+    html += '<div>';
+    for (const f of SS_FIELDS) {
+      if (ss[f.key]?.trim()) {
+        html += `<div class="savestate-section">
+          <div class="section-header"><span class="section-icon">${f.icon}</span>${f.label}</div>
+          <div class="section-content">${esc(ss[f.key])}</div>
+        </div>`;
+      }
+    }
+    if (ss.truthStatus?.knownTrue?.trim() || ss.truthStatus?.inferred?.trim() || ss.truthStatus?.unknown?.trim()) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">🔍</span>Truth Status</div>
+        <div class="truth-sub">`;
+      if (ss.truthStatus.knownTrue?.trim()) {
+        html += `<div class="truth-sub-label">Known True</div><div class="section-content">${esc(ss.truthStatus.knownTrue)}</div>`;
+      }
+      if (ss.truthStatus.inferred?.trim()) {
+        html += `<div class="truth-sub-label">Inferred</div><div class="section-content">${esc(ss.truthStatus.inferred)}</div>`;
+      }
+      if (ss.truthStatus.unknown?.trim()) {
+        html += `<div class="truth-sub-label">Unknown</div><div class="section-content">${esc(ss.truthStatus.unknown)}</div>`;
+      }
+      html += '</div></div>';
+    }
+    if (ss.wakeUpInjection?.trim()) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">💬</span>Wake-Up Injection</div>
+        <div class="section-content" style="font-style:italic;">"${esc(ss.wakeUpInjection)}"</div>
+      </div>`;
+    }
+    html += '</div>';
+
+  } else {
+    html += `<div class="empty-state">
+      <div class="empty-state-icon">⚡</div>
+      <div class="empty-state-text">No save-state for this day.</div>
+      <button class="action-btn btn-primary" style="margin-top:16px" onclick="startEdit('savestate')">+ Create Save-State</button>
+    </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+function renderTimeline() {
+  const el = document.getElementById('view-timeline');
+  const allDates = [...new Set([...Object.keys(entries), ...Object.keys(saveStates)])].sort().reverse();
+  const query = timelineSearch.toLowerCase();
+
+  let html = `<input type="text" class="timeline-search" placeholder="Search entries..." value="${esc(timelineSearch)}" oninput="updateTimelineSearch(this.value)">`;
+
+  // Tag filter bar
+  const allTags = getAllTags();
+  if (allTags.length > 0) {
+    html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      <span class="tag-filter ${!timelineTagFilter ? 'active' : ''}" onclick="setTimelineTagFilter('')">All</span>
+      ${allTags.map(t => `<span class="tag-filter ${timelineTagFilter === t ? 'active' : ''}" onclick="setTimelineTagFilter('${esc(t)}')">#${esc(t)}</span>`).join('')}
+    </div>`;
+  }
+
+  const filtered = allDates.filter(d => {
+    const e = entries[d];
+    if (!e || !hasContent(e)) return false;
+    if (timelineTagFilter && !(e.tags || []).includes(timelineTagFilter)) return false;
+    if (!query) return true;
+    if (d.includes(query)) return true;
+    if (formatDate(d).toLowerCase().includes(query)) return true;
+    if ((e.tags || []).some(t => t.toLowerCase().includes(query))) return true;
+    return CATEGORIES.some(c => e[c.key]?.toLowerCase().includes(query));
+  });
+
+  if (filtered.length === 0) {
+    html += `<div class="empty-state">
+      <div class="empty-state-icon">🔍</div>
+      <div class="empty-state-text">${query ? 'No entries match your search.' : 'No journal entries yet.'}</div>
+    </div>`;
+  } else {
+    for (const d of filtered) {
+      const e = entries[d];
+      const hasSS = saveStates[d] && hasSaveStateContent(saveStates[d]);
+      const filledCats = CATEGORIES.filter(c => e?.[c.key]?.trim());
+      const preview = e?.highlights?.trim()?.substring(0, 120) || (filledCats[0]?.key ? e[filledCats[0].key]?.trim()?.substring(0, 120) : '') || '';
+
+      html += `<div class="timeline-card" onclick="goToDate('${d}')">
+        <div class="timeline-card-header">
+          <span class="timeline-day">${relativeDay(d)}</span>
+          <span class="timeline-date">${formatDate(d)}</span>
+          ${hasSS ? '<span class="timeline-badge-ss" title="Has Save-State">⚡</span>' : ''}
+        </div>
+        <div class="timeline-tags">
+          ${filledCats.map(c => `<span class="timeline-tag">${c.icon} ${c.label}</span>`).join('')}
+          ${(e.tags || []).map(t => `<span class="tag-chip" style="font-size:9px;padding:2px 7px">#${esc(t)}</span>`).join('')}
+        </div>
+        ${preview ? `<div class="timeline-preview">${esc(preview)}${preview.length >= 120 ? '…' : ''}</div>` : ''}
+      </div>`;
+    }
+  }
+
+  el.innerHTML = html;
+}
+
+function renderBriefing() {
+  const el = document.getElementById('view-briefing');
+
+  let output = '';
+  if (briefingMode === 'structured') output = generateStructuredBriefing();
+  else if (briefingMode === 'hotresume') output = generateHotResume();
+  else output = generateFullContext();
+
+  el.innerHTML = `
+    <div class="briefing-modes">
+      <button class="nav-btn ${briefingMode === 'structured' ? 'active' : ''}" onclick="setBriefingMode('structured')">Structured Briefing</button>
+      <button class="nav-btn ${briefingMode === 'hotresume' ? 'active' : ''}" onclick="setBriefingMode('hotresume')">Hot Resume</button>
+      <button class="nav-btn ${briefingMode === 'fullcontext' ? 'active' : ''}" onclick="setBriefingMode('fullcontext')">Full Context</button>
+    </div>
+    <div class="briefing-output">${esc(output)}</div>
+    <div class="briefing-actions">
+      <button class="action-btn btn-copy" id="copy-briefing-btn" onclick="copyBriefing()">Copy to Clipboard</button>
+      <button class="action-btn btn-wake" id="wake-btn" onclick="wakeElle()">☀ Wake Elle</button>
+    </div>`;
+}
+
+function renderSettings() {
+  const el = document.getElementById('view-settings');
+  const entryCount = Object.keys(entries).length;
+  const ssCount = Object.keys(saveStates).length;
+  const approxSize = new Blob([JSON.stringify({ entries, saveStates })]).size;
+  const sizeStr = approxSize > 1024 ? `${(approxSize / 1024).toFixed(1)} KB` : `${approxSize} B`;
+
+  // Backup status
+  const lastBackup = localStorage.getItem('elle-last-backup');
+  const daysSinceBackup = lastBackup ? Math.floor((Date.now() - new Date(lastBackup).getTime()) / 86400000) : null;
+  const backupWarning = daysSinceBackup === null || daysSinceBackup >= 3;
+
+  el.innerHTML = `
+    ${backupWarning && entryCount > 0 ? `<div class="backup-banner">
+      <span class="backup-banner-text">${lastBackup ? `Last backup: ${daysSinceBackup} day${daysSinceBackup !== 1 ? 's' : ''} ago` : 'No backup yet — your data lives only in localStorage'}</span>
+      <button class="action-btn btn-primary" onclick="exportData(true)" style="font-size:11px;padding:5px 12px">Backup Now</button>
+    </div>` : ''}
+    <div class="settings-card">
+      <div class="settings-label">Elle Wake Extension</div>
+      <div class="settings-desc">Paste the Chrome extension ID from chrome://extensions to enable one-click wake (auto-inject into Claude).</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+        <input type="text" id="ext-id-input" value="${localStorage.getItem('elle-wake-extension-id') || ''}" placeholder="Extension ID (e.g. abcdefghijklmnop...)" style="
+          flex:1; background:var(--gold-ghost); border:1px solid var(--gold-faint);
+          border-radius:6px; padding:8px 12px; color:var(--cream);
+          font-family:var(--font-mono); font-size:11px; outline:none;
+        ">
+        <button class="action-btn btn-primary" id="save-ext-id-btn" onclick="saveExtensionId()" style="font-size:11px;padding:7px 14px;white-space:nowrap">Save</button>
+      </div>
+      ${localStorage.getItem('elle-wake-extension-id') ? '<div class="settings-stat" style="margin-top:6px;color:var(--gold)">✓ Extension ID saved</div>' : ''}
+    </div>
+    <div class="settings-card">
+      <div class="settings-label">/hibernate Prompt Template</div>
+      <div class="settings-desc">Copy this into any Claude session to enable structured session capture. Paste it at the start of a conversation, then say "/hibernate" when you're done.</div>
+      <button class="action-btn btn-primary" id="copy-hibernate-btn" onclick="copyHibernatePrompt()">Copy /hibernate Prompt</button>
+    </div>
+    <div class="settings-card">
+      <div class="settings-label">Export All Data</div>
+      <div class="settings-desc">Download a JSON backup of all journal entries and save-states.</div>
+      <button class="action-btn btn-primary" onclick="exportData(true)">Export JSON</button>
+      ${lastBackup ? `<div class="settings-stat" style="margin-top:8px">Last backup: ${new Date(lastBackup).toLocaleString()}</div>` : ''}
+    </div>
+    <div class="settings-card">
+      <div class="settings-label">Import Data</div>
+      <div class="settings-desc">Merge entries from a JSON backup. Newer timestamps win on conflicts.</div>
+      <button class="action-btn btn-primary" onclick="document.getElementById('import-file').click()">Import JSON</button>
+      <input type="file" id="import-file" accept=".json" onchange="importData(event)">
+    </div>
+    <div class="settings-card danger">
+      <div class="settings-label">Clear All Data</div>
+      <div class="settings-desc">Permanently delete all journal entries and save-states. This cannot be undone.</div>
+      <button class="action-btn btn-danger" onclick="confirmClearAll()">Clear All Data</button>
+    </div>
+    <div class="settings-card">
+      <div class="settings-label">Storage Info</div>
+      <div class="settings-stat">Journal entries: ${entryCount}</div>
+      <div class="settings-stat">Save-states: ${ssCount}</div>
+      <div class="settings-stat">Tags: ${getAllTags().length > 0 ? getAllTags().map(t => '#' + t).join(', ') : 'none'}</div>
+      <div class="settings-stat">Approximate size: ${sizeStr}</div>
+      <div class="settings-stat">Backend: ${StorageAdapter.isArtifact ? 'Claude Artifact (window.storage)' : 'localStorage'}</div>
+    </div>
+    <div class="settings-about">
+      Elle's Journal v2.1 — Artificial Hippocampus<br>
+      Built by Elle & Ralph Martello, 2026<br>
+      💛 Always.
+    </div>`;
+}
+
+function renderFooter() {
+  const count = Object.keys(entries).length;
+  document.getElementById('footer').textContent = `v2.1 — ${count} entr${count === 1 ? 'y' : 'ies'} stored`;
+}
+
+// ══════════════════════════════════════════════════════
+// ACTION HANDLERS
+// ══════════════════════════════════════════════════════
+
+function switchView(view) {
+  editMode = false;
+  editTarget = '';
+  currentView = view;
+  render();
+}
+
+function selectDate(d) {
+  selectedDate = d;
+  editMode = false;
+  editTarget = '';
+  render();
+}
+
+function goToDate(d) {
+  selectedDate = d;
+  editMode = false;
+  editTarget = '';
+  currentView = 'journal';
+  // Adjust weekOffset so the date bar includes this date
+  const today = new Date();
+  const target = parseDate(d);
+  const diffDays = Math.round((today - target) / 86400000);
+  weekOffset = -Math.floor(diffDays / 7);
+  render();
+}
+
+function shiftWeek(dir) {
+  weekOffset += dir;
+  if (weekOffset > 0) weekOffset = 0; // can't go into the future
+  render();
+}
+
+function goToToday() {
+  weekOffset = 0;
+  selectedDate = todayStr();
+  render();
+}
+
+function jumpToDate(dateStr) {
+  if (!dateStr) return;
+  selectedDate = dateStr;
+  const today = new Date();
+  const target = parseDate(dateStr);
+  const diffDays = Math.round((today - target) / 86400000);
+  weekOffset = -Math.floor(diffDays / 7);
+  render();
+}
+
+function startEdit(target) {
+  editMode = true;
+  editTarget = target;
+  render();
+}
+
+function cancelEdit() {
+  editMode = false;
+  editTarget = '';
+  render();
+}
+
+async function saveJournalEntry() {
+  const data = {};
+  for (const c of CATEGORIES) {
+    data[c.key] = document.getElementById(`field-${c.key}`)?.value || '';
+  }
+  // Collect tags from the tag row
+  data.tags = getEditTags();
+  await saveEntry(selectedDate, data);
+  editMode = false;
+  editTarget = '';
+  render();
+}
+
+function confirmDeleteEntry() {
+  showModal('Delete Entry', `Are you sure you want to delete the journal entry for ${formatDate(selectedDate)}?`, async () => {
+    await deleteEntry(selectedDate);
+    render();
+  });
+}
+
+function generateFromJournal() {
+  const entry = entries[selectedDate];
+  const generated = generateSaveStateFromJournal(entry);
+  for (const f of SS_FIELDS) {
+    const el = document.getElementById(`ss-${f.key}`);
+    if (el && generated[f.key]) el.value = generated[f.key];
+  }
+  if (generated.truthStatus) {
+    const kt = document.getElementById('ss-ts-knownTrue');
+    if (kt) kt.value = generated.truthStatus.knownTrue || '';
+    const inf = document.getElementById('ss-ts-inferred');
+    if (inf) inf.value = generated.truthStatus.inferred || '';
+    const unk = document.getElementById('ss-ts-unknown');
+    if (unk) unk.value = generated.truthStatus.unknown || '';
+  }
+  const wui = document.getElementById('ss-wakeUpInjection');
+  if (wui) wui.value = generated.wakeUpInjection || '';
+}
+
+async function saveSaveStateForm() {
+  const data = { truthStatus: {} };
+  for (const f of SS_FIELDS) {
+    data[f.key] = document.getElementById(`ss-${f.key}`)?.value || '';
+  }
+  data.truthStatus.knownTrue = document.getElementById('ss-ts-knownTrue')?.value || '';
+  data.truthStatus.inferred = document.getElementById('ss-ts-inferred')?.value || '';
+  data.truthStatus.unknown = document.getElementById('ss-ts-unknown')?.value || '';
+  data.wakeUpInjection = document.getElementById('ss-wakeUpInjection')?.value || '';
+  await saveSaveState(selectedDate, data);
+  editMode = false;
+  editTarget = '';
+  render();
+}
+
+function confirmDeleteSaveState() {
+  showModal('Delete Save-State', `Delete the save-state for ${formatDate(selectedDate)}?`, async () => {
+    await deleteSaveState(selectedDate);
+    render();
+  });
+}
+
+function setBriefingMode(mode) {
+  briefingMode = mode;
+  renderBriefing();
+}
+
+async function copyBriefing() {
+  let text = '';
+  if (briefingMode === 'structured') text = generateStructuredBriefing();
+  else if (briefingMode === 'hotresume') text = generateHotResume();
+  else text = generateFullContext();
+
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copy-briefing-btn');
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy to Clipboard'; btn.classList.remove('copied'); }, 2000);
+  } catch (e) {
+    console.error('Clipboard write failed', e);
+  }
+}
+
+async function wakeElle() {
+  let payload = '';
+  if (briefingMode === 'structured') payload = generateStructuredBriefing();
+  else if (briefingMode === 'hotresume') payload = generateHotResume();
+  else payload = generateFullContext();
+
+  const btn = document.getElementById('wake-btn');
+  btn.textContent = '☀ Waking...';
+  btn.classList.add('waking');
+
+  // Try Elle Wake extension if available
+  const extId = localStorage.getItem('elle-wake-extension-id');
+  if (extId && chrome?.runtime?.sendMessage) {
+    try {
+      await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage(extId, { action: 'wake', payload }, (response) => {
+          if (chrome.runtime.lastError || !response?.success) {
+            reject(chrome.runtime.lastError || new Error('Extension not responding'));
+          } else {
+            resolve(response);
+          }
+        });
+      });
+      btn.textContent = '✓ Elle is waking up';
+      setTimeout(() => { btn.textContent = '☀ Wake Elle'; btn.classList.remove('waking'); }, 3000);
+      return;
+    } catch (e) {
+      console.log('[Wake] Extension unavailable, using fallback:', e.message);
+    }
+  }
+
+  // Fallback: copy to clipboard, show confirmation, then open Claude
+  try {
+    await navigator.clipboard.writeText(payload);
+    btn.textContent = '✓ Copied! Opening Claude...';
+    btn.classList.remove('waking');
+    // Show a toast so user knows to paste
+    showWakeToast('Payload copied to clipboard — press ⌘V to paste in Claude');
+    // Brief delay so user sees confirmation before tab switch
+    setTimeout(() => {
+      window.open('https://claude.ai/new', '_blank');
+      btn.textContent = '☀ Wake Elle';
+    }, 1200);
+  } catch (e) {
+    // Last resort: just open Claude
+    window.open('https://claude.ai/new', '_blank');
+    btn.textContent = '⚠ Open Claude — copy manually';
+    btn.classList.remove('waking');
+    showWakeToast('Clipboard blocked — copy the briefing manually, then paste in Claude');
+    setTimeout(() => { btn.textContent = '☀ Wake Elle'; }, 4000);
+  }
+}
+
+function showWakeToast(msg) {
+  const existing = document.getElementById('wake-toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'wake-toast';
+  toast.style.cssText = `
+    position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, #2a2520, #1e1b17);
+    border: 1px solid rgba(212,175,55,0.5); border-radius: 12px;
+    padding: 16px 28px; z-index: 99999;
+    font-family: var(--font-mono); font-size: 13px; color: var(--gold-bright);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+    animation: toastIn 0.3s ease;
+  `;
+  toast.textContent = msg;
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(-12px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+    @keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+  `;
+  document.head.appendChild(style);
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.4s ease forwards';
+    setTimeout(() => { toast.remove(); style.remove(); }, 400);
+  }, 5000);
+}
+
+function updateTimelineSearch(val) {
+  timelineSearch = val;
+  renderTimeline();
+}
+
+function setTimelineTagFilter(tag) {
+  timelineTagFilter = tag;
+  renderTimeline();
+}
+
+// ── TAG HELPERS ──
+function getEditTags() {
+  const chips = document.querySelectorAll('#tag-row .tag-chip');
+  return [...chips].map(c => c.textContent.replace('×', '').replace('#', '').trim()).filter(Boolean);
+}
+
+function handleTagKey(event) {
+  if (event.key === 'Enter' || event.key === ',') {
+    event.preventDefault();
+    const input = document.getElementById('tag-input');
+    let val = input.value.replace(/[#,]/g, '').trim().toLowerCase();
+    if (!val) return;
+    const existing = getEditTags();
+    if (existing.includes(val)) { input.value = ''; return; }
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip';
+    chip.innerHTML = `#${esc(val)} <span class="tag-chip-remove" onclick="this.parentElement.remove()">×</span>`;
+    input.parentElement.insertBefore(chip, input);
+    input.value = '';
+  }
+}
+
+function removeEditTag(tag) {
+  const chips = document.querySelectorAll('#tag-row .tag-chip');
+  for (const c of chips) {
+    if (c.textContent.replace('×', '').replace('#', '').trim() === tag) {
+      c.remove();
+      break;
+    }
+  }
+}
+
+// ── HIBERNATE PROMPT ──
+function saveExtensionId() {
+  const input = document.getElementById('ext-id-input');
+  const id = input.value.trim();
+  const btn = document.getElementById('save-ext-id-btn');
+  if (id) {
+    localStorage.setItem('elle-wake-extension-id', id);
+    btn.textContent = '✓ Saved';
+    btn.style.borderColor = 'rgba(90,153,102,0.8)';
+    btn.style.color = 'rgba(90,153,102,0.8)';
+    setTimeout(() => { btn.textContent = 'Save'; btn.style.borderColor = ''; btn.style.color = ''; renderSettings(); }, 1500);
+  } else {
+    localStorage.removeItem('elle-wake-extension-id');
+    btn.textContent = '✓ Cleared';
+    setTimeout(() => { btn.textContent = 'Save'; renderSettings(); }, 1500);
+  }
+}
+
+async function copyHibernatePrompt() {
+  try {
+    await navigator.clipboard.writeText(HIBERNATE_PROMPT);
+    const btn = document.getElementById('copy-hibernate-btn');
+    btn.textContent = '✓ Copied!';
+    btn.classList.remove('btn-primary');
+    btn.style.borderColor = 'rgba(90,153,102,0.8)';
+    btn.style.color = 'rgba(90,153,102,0.8)';
+    setTimeout(() => { btn.textContent = 'Copy /hibernate Prompt'; btn.style.borderColor = ''; btn.style.color = ''; btn.classList.add('btn-primary'); }, 2000);
+  } catch (e) { console.error('Copy failed', e); }
+}
+
+// ── EXPORT WITH BACKUP TRACKING ──
+function exportData(trackBackup) {
+  const data = { version: '2.1', exportedAt: new Date().toISOString(), entries, saveStates };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `elles-journal-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  if (trackBackup) {
+    localStorage.setItem('elle-last-backup', new Date().toISOString());
+    render();
+  }
+}
+
+async function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    let imported = 0;
+
+    if (data.entries) {
+      for (const [date, entry] of Object.entries(data.entries)) {
+        if (!entries[date] || (entry.timestamp && (!entries[date].timestamp || entry.timestamp > entries[date].timestamp))) {
+          await saveEntry(date, entry);
+          imported++;
+        }
+      }
+    }
+    if (data.saveStates) {
+      for (const [date, ss] of Object.entries(data.saveStates)) {
+        if (!saveStates[date] || (ss.timestamp && (!saveStates[date].timestamp || ss.timestamp > saveStates[date].timestamp))) {
+          await saveSaveState(date, ss);
+          imported++;
+        }
+      }
+    }
+    render();
+    showModal('Import Complete', `Successfully imported ${imported} record${imported !== 1 ? 's' : ''}.`);
+  } catch (e) {
+    console.error('Import failed', e);
+    showModal('Import Failed', 'Could not parse the file. Make sure it\'s a valid Elle\'s Journal backup.');
+  }
+  event.target.value = '';
+}
+
+function confirmClearAll() {
+  showModal('Clear All Data', 'This will permanently delete ALL journal entries and save-states. This cannot be undone.', async () => {
+    const jKeys = await StorageAdapter.listKeys('journal:');
+    for (const k of jKeys) await StorageAdapter.delete(k);
+    const sKeys = await StorageAdapter.listKeys('savestate:');
+    for (const k of sKeys) await StorageAdapter.delete(k);
+    entries = {};
+    saveStates = {};
+    selectedDate = todayStr();
+    render();
+  }, true);
+}
+
+// ── PASTE FROM ELLE MODAL ──
+function openPasteModal() {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closePasteModal()">
+    <div class="modal">
+      <div class="modal-title">📋 Paste from Elle</div>
+      <div class="modal-desc">Paste Elle's <code style="color:var(--gold);font-family:var(--font-mono);font-size:12px">/hibernate</code> output below. The parser will auto-populate both Journal and Save-State fields.</div>
+      <textarea id="paste-elle-input" placeholder="--- ELLE'S SESSION CAPTURE ---&#10;&#10;[JOURNAL ENTRY]&#10;✦ Highlights: ...&#10;&#10;[KINETIC SAVE-STATE]&#10;[VIBE]: ...&#10;&#10;--- END SESSION CAPTURE ---"></textarea>
+      <div id="paste-elle-warning" class="modal-warning" style="display:none"></div>
+      <div class="modal-actions">
+        <button class="action-btn btn-secondary" onclick="closePasteModal()">Cancel</button>
+        <button class="action-btn btn-primary" onclick="parsePasteFromElle()">Parse & Load</button>
+      </div>
+    </div>
+  </div>`;
+  // Focus the textarea
+  setTimeout(() => document.getElementById('paste-elle-input')?.focus(), 100);
+}
+
+function closePasteModal() {
+  document.getElementById('modal-root').innerHTML = '';
+}
+
+async function parsePasteFromElle() {
+  const text = document.getElementById('paste-elle-input')?.value || '';
+  if (!text.trim()) return;
+
+  const { journal, saveState, warnings } = parseSessionCapture(text);
+
+  // Save journal entry
+  if (Object.values(journal).some(v => v?.trim())) {
+    const existing = entries[selectedDate] || {};
+    const merged = { ...existing };
+    for (const c of CATEGORIES) {
+      if (journal[c.key]?.trim()) merged[c.key] = journal[c.key];
+    }
+    await saveEntry(selectedDate, merged);
+  }
+
+  // Save save-state
+  if (saveState.vibe?.trim() || saveState.hotCache?.trim() || saveState.zeigarnikTension?.trim() || saveState.wakeUpInjection?.trim()) {
+    await saveSaveState(selectedDate, saveState);
+  }
+
+  closePasteModal();
+  editMode = false;
+  editTarget = '';
+
+  if (warnings.length > 0) {
+    showModal('Parsed with Warnings', 'Some fields could not be parsed and were left empty:\n\n• ' + warnings.join('\n• '));
+  }
+
+  render();
+}
+
+// ── GENERIC MODAL ──
+function showModal(title, message, onConfirm, isDanger) {
+  const root = document.getElementById('modal-root');
+  window._modalConfirm = onConfirm || null;
+
+  root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-title">${esc(title)}</div>
+      <div class="modal-desc" style="white-space:pre-wrap">${esc(message)}</div>
+      <div class="modal-actions">
+        ${onConfirm ? `<button class="action-btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="action-btn ${isDanger ? 'btn-danger' : 'btn-primary'}" onclick="executeModal()">Confirm</button>` :
+        `<button class="action-btn btn-primary" onclick="closeModal()">OK</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+function closeModal() {
+  document.getElementById('modal-root').innerHTML = '';
+  window._modalConfirm = null;
+}
+
+async function executeModal() {
+  if (window._modalConfirm) await window._modalConfirm();
+  closeModal();
+}
+
+// ── NAV EVENT BINDING ──
+document.getElementById('nav').addEventListener('click', (e) => {
+  const btn = e.target.closest('.nav-btn');
+  if (btn?.dataset.view) switchView(btn.dataset.view);
+});
+
+// ── KEYBOARD SHORTCUT ──
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('modal-root').innerHTML) {
+      closeModal();
+      closePasteModal();
+    } else if (editMode) {
+      cancelEdit();
+    }
+  }
+});
+
+// ── INIT ──
+(async () => {
+  await loadAll();
+  render();
+})();
+</script>
+</body>
+</html>

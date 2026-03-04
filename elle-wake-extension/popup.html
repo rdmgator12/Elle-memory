@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600&family=JetBrains+Mono:wght@300;400&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 360px;
+    min-height: 200px;
+    background: linear-gradient(168deg, #1a1714 0%, #1e1b17 40%, #1a1714 100%);
+    color: #e8dcc8;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    padding: 20px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+  }
+  .header-icon { font-size: 24px; }
+  .header-title { font-size: 18px; color: #d4af37; font-weight: 400; }
+  .header-sub {
+    font-size: 10px;
+    color: rgba(212, 175, 55, 0.5);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+
+  .status-card {
+    background: rgba(212, 175, 55, 0.04);
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .status-label {
+    font-size: 10px;
+    color: rgba(212, 175, 55, 0.6);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+  .status-value {
+    font-size: 14px;
+    color: rgba(232, 220, 200, 0.8);
+    line-height: 1.4;
+  }
+  .status-value.ready { color: #d4af37; }
+  .status-value.empty { color: rgba(232, 220, 200, 0.3); font-style: italic; }
+  .status-meta {
+    font-size: 10px;
+    color: rgba(232, 220, 200, 0.25);
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 6px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 100px;
+    background: rgba(212, 175, 55, 0.04);
+    border: 1px solid rgba(212, 175, 55, 0.12);
+    border-radius: 8px;
+    padding: 12px;
+    color: #e8dcc8;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    margin-bottom: 12px;
+  }
+  textarea:focus { border-color: rgba(212, 175, 55, 0.35); }
+  textarea::placeholder { color: rgba(232, 220, 200, 0.2); }
+
+  .btn-row { display: flex; gap: 8px; }
+
+  .btn-wake {
+    flex: 1;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.25), rgba(212, 175, 55, 0.15));
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    color: #d4af37;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.25s;
+    letter-spacing: 0.5px;
+  }
+  .btn-wake:hover {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.35), rgba(212, 175, 55, 0.2));
+    border-color: rgba(212, 175, 55, 0.6);
+  }
+  .btn-wake:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .btn-clear {
+    background: transparent;
+    border: 1px solid rgba(232, 220, 200, 0.1);
+    color: rgba(232, 220, 200, 0.3);
+    padding: 12px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.25s;
+  }
+  .btn-clear:hover {
+    border-color: rgba(180, 60, 60, 0.3);
+    color: rgba(180, 60, 60, 0.6);
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid rgba(212, 175, 55, 0.08);
+    margin: 14px 0;
+  }
+
+  .section-label {
+    font-size: 11px;
+    color: rgba(212, 175, 55, 0.5);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  .footer {
+    text-align: center;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(212, 175, 55, 0.08);
+  }
+  .footer p {
+    font-size: 10px;
+    color: rgba(212, 175, 55, 0.25);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .success-flash {
+    animation: flash 0.3s ease;
+  }
+  @keyframes flash {
+    0% { background: rgba(90, 153, 102, 0.3); }
+    100% { background: transparent; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-icon">💛</span>
+  <div>
+    <div class="header-title">Elle Wake</div>
+    <div class="header-sub">Artificial Hippocampus</div>
+  </div>
+</div>
+
+<!-- Payload Status -->
+<div class="status-card" id="status-card">
+  <div class="status-label">Payload Status</div>
+  <div class="status-value empty" id="status-value">No payload stored</div>
+  <div class="status-meta" id="status-meta"></div>
+</div>
+
+<!-- Wake Button (when payload exists) -->
+<div id="wake-section">
+  <div class="btn-row">
+    <button class="btn-wake" id="btn-wake" disabled>☀ Wake Elle</button>
+    <button class="btn-clear" id="btn-clear">✕</button>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- Manual Paste -->
+<div>
+  <div class="section-label">Manual Payload</div>
+  <textarea id="manual-payload" placeholder="Paste your /wake payload here..."></textarea>
+  <div class="btn-row">
+    <button class="btn-wake" id="btn-manual-wake">☀ Load & Wake</button>
+  </div>
+</div>
+
+<div class="footer">
+  <p>Elle Wake v1.0 — Martello Command 💛</p>
+</div>
+
+<script>
+  const statusValue = document.getElementById("status-value");
+  const statusMeta = document.getElementById("status-meta");
+  const statusCard = document.getElementById("status-card");
+  const btnWake = document.getElementById("btn-wake");
+  const btnClear = document.getElementById("btn-clear");
+  const btnManualWake = document.getElementById("btn-manual-wake");
+  const manualPayload = document.getElementById("manual-payload");
+
+  // Check current status
+  function refreshStatus() {
+    chrome.runtime.sendMessage({ action: "getStatus" }, (response) => {
+      if (chrome.runtime.lastError || !response) {
+        statusValue.textContent = "Extension error";
+        statusValue.className = "status-value empty";
+        return;
+      }
+
+      if (response.hasPayload) {
+        statusValue.textContent = "Payload ready";
+        statusValue.className = "status-value ready";
+        statusMeta.textContent = `${response.previewLength.toLocaleString()} chars · Stored ${response.timestamp ? new Date(response.timestamp).toLocaleTimeString() : "recently"}`;
+        btnWake.disabled = false;
+      } else {
+        statusValue.textContent = "No payload stored";
+        statusValue.className = "status-value empty";
+        statusMeta.textContent = "";
+        btnWake.disabled = true;
+      }
+    });
+  }
+
+  // Wake with stored payload
+  btnWake.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "checkPayload" }, (response) => {
+      if (response && response.payload) {
+        chrome.runtime.sendMessage({
+          action: "wake",
+          payload: response.payload
+        }, (wakeResponse) => {
+          if (wakeResponse && wakeResponse.success) {
+            statusCard.classList.add("success-flash");
+            statusValue.textContent = "Waking Elle...";
+            setTimeout(() => window.close(), 500);
+          }
+        });
+      }
+    });
+  });
+
+  // Clear stored payload
+  btnClear.addEventListener("click", () => {
+    chrome.runtime.sendMessage({ action: "clearPayload" }, () => {
+      refreshStatus();
+    });
+  });
+
+  // Manual wake — paste payload and go
+  btnManualWake.addEventListener("click", () => {
+    const payload = manualPayload.value.trim();
+    if (!payload) return;
+
+    chrome.runtime.sendMessage({
+      action: "wake",
+      payload: payload
+    }, (response) => {
+      if (response && response.success) {
+        statusCard.classList.add("success-flash");
+        statusValue.textContent = "Waking Elle...";
+        setTimeout(() => window.close(), 500);
+      }
+    });
+  });
+
+  // Init
+  refreshStatus();
+</script>
+</body>
+</html>

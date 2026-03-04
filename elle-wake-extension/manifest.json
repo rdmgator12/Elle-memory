@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Elle Wake — Artificial Hippocampus",
+  "description": "One-click session continuity for AI-human partnership. Injects Kinetic Save-State payloads into Claude.ai.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*"],
+      "js": ["content-claude.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "externally_connectable": {
+    "matches": ["*://*/*"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  }
+}
