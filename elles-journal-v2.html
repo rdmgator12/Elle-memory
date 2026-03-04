@@ -722,6 +722,73 @@ input[type="file"] { display: none; }
   background: rgba(212,175,55,0.06);
 }
 
+/* ── SOURCE SELECTOR ── */
+.source-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.source-row-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.4;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.source-chip {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.12);
+  color: var(--cream-dim);
+  border-radius: 14px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.source-chip:hover {
+  border-color: rgba(212,175,55,0.25);
+  color: var(--cream);
+  background: rgba(212,175,55,0.04);
+}
+.source-chip.active {
+  border-color: rgba(212,175,55,0.5);
+  color: var(--gold);
+  background: rgba(212,175,55,0.1);
+}
+.source-chip.has-content::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.source-check {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid rgba(212,175,55,0.12);
+  color: var(--cream-dim);
+  border-radius: 14px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.source-check:hover {
+  border-color: rgba(212,175,55,0.25);
+}
+.source-check.checked {
+  border-color: rgba(212,175,55,0.4);
+  color: var(--gold);
+  background: rgba(212,175,55,0.08);
+}
+
 /* ── BACKUP BANNER ── */
 .backup-banner {
   background: rgba(212,175,55,0.06);
@@ -804,16 +871,36 @@ const SS_FIELDS = [
   { key: 'antiGoals',        icon: '⛔', label: 'Anti-Goals',         placeholder: 'Do NOT refactor X — it works. Do NOT reopen Y debate — decided.' },
 ];
 
-// ── STORAGE ADAPTER (v2.4 — IndexedDB v2 / localStorage / artifact) ──
+// ── SOURCES ──
+const DEFAULT_SOURCES = [
+  { id: 'default',     label: 'General',      icon: '\u270F' },
+  { id: 'claude-chat', label: 'Claude Chat',   icon: '\uD83D\uDCAC' },
+  { id: 'claude-code', label: 'Claude Code',   icon: '\u2328' },
+  { id: 'cowork',      label: 'Cowork',        icon: '\uD83E\uDD1D' },
+];
 
-// Helper: build episode record from journal entry + save-state for a date
-function buildEpisodeRecord(date, entry, saveState) {
+// ── STORAGE ADAPTER (v3.0 — IndexedDB v3 / localStorage / artifact) ──
+
+// Source helpers
+function getAllSources() { return [...DEFAULT_SOURCES, ...(customSources || [])]; }
+function getSourceLabel(id) { return getAllSources().find(s => s.id === id)?.label || id; }
+function getSourceIcon(id) { return getAllSources().find(s => s.id === id)?.icon || '\u270F'; }
+function sourceKey(prefix, date, source) { return `${prefix}:${date}:${source || 'default'}`; }
+function parseCompoundKey(key) {
+  const parts = key.split(':');
+  return { prefix: parts[0], date: parts[1], source: parts.slice(2).join(':') || 'default' };
+}
+
+// Helper: build episode record from journal entry + save-state for a date+source
+function buildEpisodeRecord(date, source, entry, saveState) {
   const tags = new Set();
   if (entry?.tags) entry.tags.forEach(t => tags.add(t));
   if (saveState?.tags) saveState.tags.forEach(t => tags.add(t));
   if (saveState?.decisions) saveState.decisions.forEach(d => { if (d.workstream) tags.add(d.workstream); });
   return {
+    id: `${date}:${source || 'default'}`,
     date,
+    source: source || 'default',
     tags: [...tags],
     highlights: entry?.highlights || '', builds: entry?.builds || '',
     decisions: entry?.decisions || '', openThreads: entry?.openThreads || '',
@@ -841,14 +928,16 @@ const StorageAdapter = {
       if (localStorage.getItem('elle-idb-migrated') !== 'true') {
         await this._migrateFromLocalStorage();
       }
-      // Populate indexed stores if needed (v1→v2 upgrade or first run)
+      // Migrate kv keys to v3 compound format (date:source)
+      await this._migrateKVKeysToV3();
+      // Populate indexed stores if needed (upgrade or first run)
       await this._populateIndexedStores();
       // Request persistent storage to prevent eviction
       if (navigator.storage && navigator.storage.persist) {
         try { this._persistent = await navigator.storage.persist(); }
         catch { this._persistent = false; }
       }
-      console.log(`Hippocampus online: IndexedDB v2 (persistent: ${this._persistent})`);
+      console.log(`Hippocampus online: IndexedDB v3 multi-source (persistent: ${this._persistent})`);
     } catch (err) {
       console.warn('IndexedDB unavailable, falling back to localStorage:', err.message || err);
       this._backend = 'localstorage';
@@ -859,7 +948,7 @@ const StorageAdapter = {
   // ── Open/create the IndexedDB database (schema v2) ──
   _openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('elle-journal', 2);
+      const request = indexedDB.open('elle-journal', 3);
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
         const oldVersion = e.oldVersion;
@@ -879,6 +968,43 @@ const StorageAdapter = {
             const decStore = db.createObjectStore('decisions', { keyPath: 'id' });
             decStore.createIndex('workstream', 'workstream', { unique: false });
             decStore.createIndex('date', 'date', { unique: false });
+          }
+        }
+        // v2 → v3: multi-source support — rebuild episodes with id keyPath, add source indexes
+        if (oldVersion >= 2 && oldVersion < 3) {
+          // episodes store: must recreate with keyPath:'id' instead of 'date'
+          if (db.objectStoreNames.contains('episodes')) {
+            db.deleteObjectStore('episodes');
+          }
+          const epStore = db.createObjectStore('episodes', { keyPath: 'id' });
+          epStore.createIndex('tags', 'tags', { unique: false, multiEntry: true });
+          epStore.createIndex('source', 'source', { unique: false });
+          epStore.createIndex('date', 'date', { unique: false });
+
+          // decisions: add source index
+          if (db.objectStoreNames.contains('decisions')) {
+            const decStore = e.target.transaction.objectStore('decisions');
+            if (!decStore.indexNames.contains('source')) {
+              decStore.createIndex('source', 'source', { unique: false });
+            }
+          }
+        }
+        // Fresh install jumping straight to v3
+        if (oldVersion < 2) {
+          // episodes was just created above with keyPath:'date' — delete and recreate
+          if (db.objectStoreNames.contains('episodes')) {
+            db.deleteObjectStore('episodes');
+          }
+          const epStore = db.createObjectStore('episodes', { keyPath: 'id' });
+          epStore.createIndex('tags', 'tags', { unique: false, multiEntry: true });
+          epStore.createIndex('source', 'source', { unique: false });
+          epStore.createIndex('date', 'date', { unique: false });
+
+          if (db.objectStoreNames.contains('decisions')) {
+            const decStore = e.target.transaction.objectStore('decisions');
+            if (!decStore.indexNames.contains('source')) {
+              decStore.createIndex('source', 'source', { unique: false });
+            }
           }
         }
       };
@@ -925,9 +1051,50 @@ const StorageAdapter = {
     });
   },
 
+  // ── Migrate kv keys from v2 (date-only) to v3 (date:source) format ──
+  async _migrateKVKeysToV3() {
+    if (localStorage.getItem('elle-v3-migrated') === 'true') return;
+    if (this._backend !== 'indexeddb') return;
+    try {
+      const allKV = await new Promise((resolve, reject) => {
+        const records = [];
+        const tx = this._db.transaction('kv', 'readonly');
+        const req = tx.objectStore('kv').openCursor();
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) { records.push(cursor.value); cursor.continue(); }
+          else resolve(records);
+        };
+        req.onerror = (e) => reject(e.target.error);
+      });
+      const toMigrate = allKV.filter(rec => {
+        if (!rec.key.startsWith('journal:') && !rec.key.startsWith('savestate:')) return false;
+        const parts = rec.key.split(':');
+        // Old format: prefix:YYYY-MM-DD (2 parts). New format: prefix:YYYY-MM-DD:source (3+ parts)
+        return parts.length === 2;
+      });
+      if (toMigrate.length > 0) {
+        const tx = this._db.transaction('kv', 'readwrite');
+        const store = tx.objectStore('kv');
+        for (const rec of toMigrate) {
+          store.delete(rec.key);
+          store.put({ key: rec.key + ':default', value: rec.value });
+        }
+        await new Promise((resolve, reject) => {
+          tx.oncomplete = () => resolve();
+          tx.onerror = (e) => reject(e.target.error);
+        });
+        console.log(`v3 migration: rewrote ${toMigrate.length} kv keys with :default suffix`);
+      }
+      localStorage.setItem('elle-v3-migrated', 'true');
+    } catch (err) {
+      console.warn('v3 kv key migration failed:', err.message || err);
+    }
+  },
+
   // ── Populate episodes + decisions stores from kv (runs once per schema version) ──
   async _populateIndexedStores() {
-    if (localStorage.getItem('elle-indexed-populated') === '2') return;
+    if (localStorage.getItem('elle-indexed-populated') === '3') return;
     if (this._backend !== 'indexeddb') return;
     try {
       // Read all kv records
@@ -943,32 +1110,35 @@ const StorageAdapter = {
         req.onerror = (e) => reject(e.target.error);
       });
 
-      // Sort into journals and save-states
+      // Sort into journals and save-states by composite key (date:source)
       const journalMap = {}, ssMap = {};
       for (const rec of allKV) {
         if (rec.key.startsWith('journal:')) {
-          const date = rec.key.replace('journal:', '');
-          journalMap[date] = JSON.parse(rec.value);
+          const { date, source } = parseCompoundKey(rec.key);
+          const ck = `${date}:${source}`;
+          journalMap[ck] = JSON.parse(rec.value);
         } else if (rec.key.startsWith('savestate:')) {
-          const date = rec.key.replace('savestate:', '');
-          ssMap[date] = JSON.parse(rec.value);
+          const { date, source } = parseCompoundKey(rec.key);
+          const ck = `${date}:${source}`;
+          ssMap[ck] = JSON.parse(rec.value);
         }
       }
 
       // Build and write episodes + decisions in a single transaction
-      const allDates = new Set([...Object.keys(journalMap), ...Object.keys(ssMap)]);
+      const allKeys = new Set([...Object.keys(journalMap), ...Object.keys(ssMap)]);
       const tx = this._db.transaction(['episodes', 'decisions'], 'readwrite');
       const epStore = tx.objectStore('episodes');
       const decStore = tx.objectStore('decisions');
       epStore.clear(); decStore.clear();
 
-      for (const date of allDates) {
-        const entry = journalMap[date] || null;
-        const ss = ssMap[date] || null;
-        epStore.put(buildEpisodeRecord(date, entry, ss));
+      for (const ck of allKeys) {
+        const [date, source] = [ck.split(':')[0], ck.split(':').slice(1).join(':')];
+        const entry = journalMap[ck] || null;
+        const ss = ssMap[ck] || null;
+        epStore.put(buildEpisodeRecord(date, source, entry, ss));
         if (ss?.decisions) {
           ss.decisions.forEach((dec, i) => {
-            if (dec.decision) decStore.put({ id: `${date}:${i}`, date, ...dec, timestamp: ss.timestamp });
+            if (dec.decision) decStore.put({ id: `${date}:${source}:${i}`, date, source, ...dec, timestamp: ss.timestamp });
           });
         }
       }
@@ -978,8 +1148,8 @@ const StorageAdapter = {
         tx.onerror = (e) => reject(e.target.error);
       });
 
-      localStorage.setItem('elle-indexed-populated', '2');
-      console.log(`Indexed stores populated: ${allDates.size} episodes, from kv.`);
+      localStorage.setItem('elle-indexed-populated', '3');
+      console.log(`Indexed stores populated: ${allKeys.size} episodes, from kv.`);
     } catch (err) {
       console.warn('Index population failed (will use in-memory fallback):', err.message || err);
     }
@@ -1069,10 +1239,10 @@ const StorageAdapter = {
 
   // ── Dual-write: episodes + decisions (no-op on non-IndexedDB backends) ──
 
-  async writeEpisode(date, entry, saveState) {
+  async writeEpisode(date, source, entry, saveState) {
     if (this._backend !== 'indexeddb') return;
     try {
-      const record = buildEpisodeRecord(date, entry, saveState);
+      const record = buildEpisodeRecord(date, source, entry, saveState);
       return new Promise((resolve, reject) => {
         const tx = this._db.transaction('episodes', 'readwrite');
         tx.objectStore('episodes').put(record);
@@ -1082,34 +1252,41 @@ const StorageAdapter = {
     } catch { /* silent */ }
   },
 
-  async deleteEpisode(date) {
+  async deleteEpisode(date, source) {
     if (this._backend !== 'indexeddb') return;
+    const id = `${date}:${source || 'default'}`;
     try {
       return new Promise((resolve, reject) => {
         const tx = this._db.transaction('episodes', 'readwrite');
-        tx.objectStore('episodes').delete(date);
+        tx.objectStore('episodes').delete(id);
         tx.oncomplete = () => resolve(true);
         tx.onerror = (e) => reject(e.target.error);
       });
     } catch { /* silent */ }
   },
 
-  async writeDecisions(date, decisions, timestamp) {
+  async writeDecisions(date, source, decisions, timestamp) {
     if (this._backend !== 'indexeddb') return;
+    const src = source || 'default';
     try {
       return new Promise((resolve, reject) => {
         const tx = this._db.transaction('decisions', 'readwrite');
         const store = tx.objectStore('decisions');
-        // Delete existing decisions for this date via index cursor
-        const dateIdx = store.index('date');
-        const delReq = dateIdx.openKeyCursor(IDBKeyRange.only(date));
-        delReq.onsuccess = (e) => {
+        // Delete existing decisions for this date+source via cursor scan
+        const req = store.openCursor();
+        req.onsuccess = (e) => {
           const cursor = e.target.result;
-          if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
+          if (cursor) {
+            // Match decisions with this date and source
+            if (cursor.value.date === date && (cursor.value.source || 'default') === src) {
+              store.delete(cursor.primaryKey);
+            }
+            cursor.continue();
+          }
         };
         // Insert new decisions (runs after deletes within same transaction)
         decisions.forEach((dec, i) => {
-          if (dec.decision) store.put({ id: `${date}:${i}`, date, ...dec, timestamp });
+          if (dec.decision) store.put({ id: `${date}:${src}:${i}`, date, source: src, ...dec, timestamp });
         });
         tx.oncomplete = () => resolve(true);
         tx.onerror = (e) => reject(e.target.error);
@@ -1117,17 +1294,22 @@ const StorageAdapter = {
     } catch { /* silent */ }
   },
 
-  async deleteDecisionsForDate(date) {
+  async deleteDecisionsForDate(date, source) {
     if (this._backend !== 'indexeddb') return;
+    const src = source || 'default';
     try {
       return new Promise((resolve, reject) => {
         const tx = this._db.transaction('decisions', 'readwrite');
         const store = tx.objectStore('decisions');
-        const dateIdx = store.index('date');
-        const req = dateIdx.openKeyCursor(IDBKeyRange.only(date));
+        const req = store.openCursor();
         req.onsuccess = (e) => {
           const cursor = e.target.result;
-          if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
+          if (cursor) {
+            if (cursor.value.date === date && (cursor.value.source || 'default') === src) {
+              store.delete(cursor.primaryKey);
+            }
+            cursor.continue();
+          }
         };
         tx.oncomplete = () => resolve(true);
         tx.onerror = (e) => reject(e.target.error);
@@ -1215,24 +1397,70 @@ const StorageAdapter = {
   async rebuildIndexedStores() {
     if (this._backend !== 'indexeddb') return;
     localStorage.removeItem('elle-indexed-populated');
+    localStorage.removeItem('elle-v3-migrated');
+    await this._migrateKVKeysToV3();
     await this._populateIndexedStores();
   }
 };
 
 // ── STATE ──
-let entries = {};
-let saveStates = {};
+let entries = {};          // keyed by 'YYYY-MM-DD:source'
+let saveStates = {};       // keyed by 'YYYY-MM-DD:source'
+let customSources = [];    // user-defined sources beyond DEFAULT_SOURCES
 let selectedDate = todayStr();
+let selectedSource = 'default'; // which source is active for editing
 let currentView = 'journal';
 let editMode = false;
 let editTarget = '';  // 'journal' or 'savestate'
 let briefingMode = 'structured';
+let briefingSources = [];  // source ids selected for briefing (empty = all)
 let timelineSearch = '';
+let timelineSourceFilter = ''; // filter timeline by source
 let weekOffset = 0;        // 0 = current week, -1 = last week, etc.
 let timelineTagFilter = ''; // filter timeline by tag
 let workstreamView = 'overview'; // 'overview' | 'detail'
 let selectedWorkstream = '';     // tag name when drilling in
 let briefingWorkstream = '';     // workstream filter for briefing
+
+// ── SOURCE HELPERS ──
+function getEntriesForDate(date) {
+  const result = {};
+  for (const [key, val] of Object.entries(entries)) {
+    const [d, ...rest] = key.split(':');
+    if (d === date) result[rest.join(':') || 'default'] = val;
+  }
+  return result;
+}
+
+function getSaveStatesForDate(date) {
+  const result = {};
+  for (const [key, val] of Object.entries(saveStates)) {
+    const [d, ...rest] = key.split(':');
+    if (d === date) result[rest.join(':') || 'default'] = val;
+  }
+  return result;
+}
+
+function dateHasAnyContent(date) {
+  const ents = getEntriesForDate(date);
+  const sss = getSaveStatesForDate(date);
+  return Object.values(ents).some(e => hasContent(e)) || Object.values(sss).some(s => hasSaveStateContent(s));
+}
+
+function dateSourcesWithContent(date) {
+  const sources = new Set();
+  for (const [key, val] of Object.entries(entries)) {
+    const [d, ...rest] = key.split(':');
+    if (d === date && hasContent(val)) sources.add(rest.join(':') || 'default');
+  }
+  for (const [key, val] of Object.entries(saveStates)) {
+    const [d, ...rest] = key.split(':');
+    if (d === date && hasSaveStateContent(val)) sources.add(rest.join(':') || 'default');
+  }
+  return [...sources];
+}
+
+function compositeKey(date, source) { return `${date}:${source || 'default'}`; }
 
 // ── DATE HELPERS ──
 function todayStr() {
@@ -1373,62 +1601,75 @@ function hasSaveStateContent(ss) {
 
 // ── DATA OPERATIONS ──
 async function loadAll() {
+  // Load custom sources
+  customSources = await StorageAdapter.get('elle:sources') || [];
+
   const jKeys = await StorageAdapter.listKeys('journal:');
   for (const k of jKeys) {
-    const d = k.replace('journal:', '');
-    entries[d] = await StorageAdapter.get(k);
+    const { date, source } = parseCompoundKey(k);
+    entries[compositeKey(date, source)] = await StorageAdapter.get(k);
   }
   const sKeys = await StorageAdapter.listKeys('savestate:');
   for (const k of sKeys) {
-    const d = k.replace('savestate:', '');
-    saveStates[d] = await StorageAdapter.get(k);
+    const { date, source } = parseCompoundKey(k);
+    saveStates[compositeKey(date, source)] = await StorageAdapter.get(k);
   }
 }
 
-async function saveEntry(date, data) {
+async function saveEntry(date, source, data) {
+  const src = source || 'default';
   data.date = date;
+  data.source = src;
   data.timestamp = new Date().toISOString();
-  entries[date] = data;
-  await StorageAdapter.set(`journal:${date}`, data);
-  await StorageAdapter.writeEpisode(date, data, saveStates[date] || null);
+  const ck = compositeKey(date, src);
+  entries[ck] = data;
+  await StorageAdapter.set(sourceKey('journal', date, src), data);
+  await StorageAdapter.writeEpisode(date, src, data, saveStates[ck] || null);
 }
 
-async function deleteEntry(date) {
-  delete entries[date];
-  await StorageAdapter.delete(`journal:${date}`);
-  if (saveStates[date]) {
-    await StorageAdapter.writeEpisode(date, null, saveStates[date]);
+async function deleteEntry(date, source) {
+  const src = source || selectedSource;
+  const ck = compositeKey(date, src);
+  delete entries[ck];
+  await StorageAdapter.delete(sourceKey('journal', date, src));
+  if (saveStates[ck]) {
+    await StorageAdapter.writeEpisode(date, src, null, saveStates[ck]);
   } else {
-    await StorageAdapter.deleteEpisode(date);
+    await StorageAdapter.deleteEpisode(date, src);
   }
 }
 
-async function saveSaveState(date, data) {
+async function saveSaveState(date, source, data) {
+  const src = source || 'default';
   data.date = date;
+  data.source = src;
   data.timestamp = new Date().toISOString();
   // Auto-derive tags from decision workstreams
   const wsSet = new Set(data.tags || []);
   if (data.decisions) data.decisions.forEach(d => { if (d.workstream) wsSet.add(d.workstream); });
   data.tags = [...wsSet];
-  saveStates[date] = data;
-  await StorageAdapter.set(`savestate:${date}`, data);
-  await StorageAdapter.writeEpisode(date, entries[date] || null, data);
-  await StorageAdapter.writeDecisions(date, data.decisions || [], data.timestamp);
+  const ck = compositeKey(date, src);
+  saveStates[ck] = data;
+  await StorageAdapter.set(sourceKey('savestate', date, src), data);
+  await StorageAdapter.writeEpisode(date, src, entries[ck] || null, data);
+  await StorageAdapter.writeDecisions(date, src, data.decisions || [], data.timestamp);
 }
 
-async function deleteSaveState(date) {
-  delete saveStates[date];
-  await StorageAdapter.delete(`savestate:${date}`);
-  if (entries[date] && hasContent(entries[date])) {
-    await StorageAdapter.writeEpisode(date, entries[date], null);
+async function deleteSaveState(date, source) {
+  const src = source || selectedSource;
+  const ck = compositeKey(date, src);
+  delete saveStates[ck];
+  await StorageAdapter.delete(sourceKey('savestate', date, src));
+  if (entries[ck] && hasContent(entries[ck])) {
+    await StorageAdapter.writeEpisode(date, src, entries[ck], null);
   } else {
-    await StorageAdapter.deleteEpisode(date);
+    await StorageAdapter.deleteEpisode(date, src);
   }
-  await StorageAdapter.deleteDecisionsForDate(date);
+  await StorageAdapter.deleteDecisionsForDate(date, src);
 }
 
 // ── GENERATE FROM JOURNAL ──
-function generateSaveStateFromJournal(entry) {
+function generateSaveStateFromJournal(entry, source) {
   if (!entry) return {};
   const buildItems = (entry.builds || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
   const momentumItems = (entry.momentum || '').split('\n').filter(l => l.trim()).map(l => '• ' + l.trim()).join('\n');
@@ -1694,89 +1935,130 @@ function goToDate(date) {
 }
 
 // ── BRIEFING GENERATORS ──
+
+function getActiveBriefingSources() {
+  // Returns source IDs to include in briefing. Empty briefingSources = all.
+  if (briefingSources.length > 0) return briefingSources;
+  return getAllSources().map(s => s.id);
+}
+
+function getFilteredEntriesForDate(date) {
+  const all = getEntriesForDate(date);
+  const active = getActiveBriefingSources();
+  const result = {};
+  for (const [src, e] of Object.entries(all)) {
+    if (active.includes(src)) result[src] = e;
+  }
+  return result;
+}
+
+function getFilteredSaveStatesForDate(date) {
+  const all = getSaveStatesForDate(date);
+  const active = getActiveBriefingSources();
+  const result = {};
+  for (const [src, ss] of Object.entries(all)) {
+    if (active.includes(src)) result[src] = ss;
+  }
+  return result;
+}
+
 function generateStructuredBriefing() {
   const lines = [];
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
 
-  const ye = entries[yesterdayStr];
-  if (ye && hasContent(ye)) {
+  const yesterdayEntries = getFilteredEntriesForDate(yesterdayStr);
+  const srcKeys = Object.keys(yesterdayEntries).filter(s => hasContent(yesterdayEntries[s]));
+  const multiSource = srcKeys.length > 1;
+
+  if (srcKeys.length > 0) {
     lines.push(`═══ YESTERDAY (${formatDate(yesterdayStr)}) ═══\n`);
     for (const c of CATEGORIES) {
-      if (ye[c.key]?.trim()) {
+      const parts = [];
+      for (const src of srcKeys) {
+        const e = yesterdayEntries[src];
+        if (e?.[c.key]?.trim()) {
+          if (multiSource) parts.push(`[${getSourceLabel(src)}] ${e[c.key].trim()}`);
+          else parts.push(e[c.key].trim());
+        }
+      }
+      if (parts.length > 0) {
         lines.push(`${c.icon} ${c.label.toUpperCase()}`);
-        lines.push(ye[c.key].trim());
+        lines.push(parts.join('\n'));
         lines.push('');
       }
     }
   }
 
-  // Open threads from last 7 days
+  // Open threads from last 7 days — aggregate across sources
   const days = getLast7Days();
   const threads = [];
   for (const d of days) {
-    if (entries[d]?.openThreads?.trim()) {
-      threads.push({ date: d, content: entries[d].openThreads.trim() });
+    const dateEntries = getFilteredEntriesForDate(d);
+    for (const [src, e] of Object.entries(dateEntries)) {
+      if (e?.openThreads?.trim()) {
+        const label = Object.keys(dateEntries).length > 1 ? ` [${getSourceLabel(src)}]` : '';
+        threads.push({ date: d, label, content: e.openThreads.trim() });
+      }
     }
   }
   if (threads.length > 0) {
     lines.push('═══ OPEN THREADS (Last 7 Days) ═══\n');
     for (const t of threads) {
-      lines.push(`[${t.date}] ${t.content}`);
+      lines.push(`[${t.date}]${t.label} ${t.content}`);
       lines.push('');
     }
   }
 
   // Momentum trends (last 3 days)
   const momentumDays = days.slice(-3);
-  const momentumEntries = momentumDays.filter(d => entries[d]?.momentum?.trim());
-  if (momentumEntries.length > 0) {
+  const momentumParts = [];
+  for (const d of momentumDays) {
+    const dateEntries = getFilteredEntriesForDate(d);
+    for (const [src, e] of Object.entries(dateEntries)) {
+      if (e?.momentum?.trim()) {
+        const label = Object.keys(dateEntries).length > 1 ? ` [${getSourceLabel(src)}]` : '';
+        momentumParts.push({ date: d, label, content: e.momentum.trim() });
+      }
+    }
+  }
+  if (momentumParts.length > 0) {
     lines.push('═══ MOMENTUM (Last 3 Days) ═══\n');
-    for (const d of momentumEntries) {
-      lines.push(`[${d}] ${entries[d].momentum.trim()}`);
+    for (const m of momentumParts) {
+      lines.push(`[${m.date}]${m.label} ${m.content}`);
       lines.push('');
     }
   }
 
   // Stats
-  const total = Object.keys(entries).length;
+  const uniqueDates = new Set();
+  for (const k of Object.keys(entries)) uniqueDates.add(k.split(':')[0]);
+  const total = uniqueDates.size;
   let streak = 0;
   const d = new Date();
   while (true) {
     const ds = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    if (entries[ds] && hasContent(entries[ds])) { streak++; d.setDate(d.getDate() - 1); }
+    if (dateHasAnyContent(ds)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
   }
   lines.push(`═══ STATS ═══`);
-  lines.push(`Total entries: ${total} | Current streak: ${streak} day${streak !== 1 ? 's' : ''}`);
+  lines.push(`Total entries: ${total} day${total !== 1 ? 's' : ''} | Current streak: ${streak} day${streak !== 1 ? 's' : ''}`);
 
   return lines.join('\n');
 }
 
-function generateHotResume() {
-  const dates = Object.keys(saveStates).sort().reverse();
-  const ssDate = dates[0];
-  const ss = ssDate ? saveStates[ssDate] : null;
-
-  if (!ss || !hasSaveStateContent(ss)) {
-    return 'No save-state found. Create one in the Save-State tab first.';
-  }
-
-  // Build decisions block
+function formatSingleWake(ss) {
   let decisionsBlock = '';
   if (ss.decisions?.length > 0) {
     decisionsBlock = '\n[DECISIONS]:\n' + ss.decisions.map(d =>
       `{ decision: "${d.decision}", rationale: "${d.rationale}", alternatives: [${(d.alternatives||[]).map(a => `"${a}"`).join(', ')}], reversibility: ${d.reversibility || 'easy'}, confidence: ${d.confidence || 'medium'} }`
     ).join('\n');
   }
-
-  // Build anti-goals block
   let antiGoalsBlock = '';
   if (ss.antiGoals?.trim()) {
     antiGoalsBlock = '\n[ANTI-GOALS]:\n' + ss.antiGoals;
   }
-
   return `/wake
 
 System Override: Internalize this Kinetic State. Do not say hello. Do not
@@ -1802,6 +2084,112 @@ ${ss.guardrails || '(not set)'}${antiGoalsBlock}
   Workstreams: ${ss.metrics.workstreamCount || '?'}
   Shock Score: ${ss.metrics.shockScore || '?'}/10` : ''}
 --------------------------`;
+}
+
+function formatMergedWake(perSource) {
+  const srcLabels = Object.entries(perSource).map(([src, ss]) => `${getSourceLabel(src)} (${ss.date})`).join(', ');
+  const srcCount = Object.keys(perSource).length;
+
+  // Merge fields
+  const vibes = Object.entries(perSource).map(([src, ss]) => ss.vibe?.trim() ? `[${getSourceLabel(src)}] ${ss.vibe.trim()}` : '').filter(Boolean).join('\n');
+  const hotCaches = Object.entries(perSource).map(([src, ss]) => {
+    if (!ss.hotCache?.trim()) return '';
+    return ss.hotCache.trim().split('\n').map(l => `[${getSourceLabel(src)}] ${l}`).join('\n');
+  }).filter(Boolean).join('\n');
+  const tensions = Object.entries(perSource).map(([src, ss]) => ss.zeigarnikTension?.trim() ? `[${getSourceLabel(src)}] ${ss.zeigarnikTension.trim()}` : '').filter(Boolean).join('\n');
+
+  // Merge decisions
+  const allDecs = [];
+  for (const [src, ss] of Object.entries(perSource)) {
+    if (ss.decisions) ss.decisions.forEach(d => allDecs.push({ ...d, _source: src }));
+  }
+  let decisionsBlock = '';
+  if (allDecs.length > 0) {
+    decisionsBlock = '\n[DECISIONS]:\n' + allDecs.map(d =>
+      `[${getSourceLabel(d._source)}] { decision: "${d.decision}", rationale: "${d.rationale}", alternatives: [${(d.alternatives||[]).map(a => `"${a}"`).join(', ')}], reversibility: ${d.reversibility || 'easy'}, confidence: ${d.confidence || 'medium'} }`
+    ).join('\n');
+  }
+
+  // Union guardrails and anti-goals (deduplicate)
+  const guardrailSet = new Set();
+  const antiGoalSet = new Set();
+  for (const ss of Object.values(perSource)) {
+    if (ss.guardrails?.trim()) ss.guardrails.trim().split('\n').forEach(l => guardrailSet.add(l.trim()));
+    if (ss.antiGoals?.trim()) ss.antiGoals.trim().split('\n').forEach(l => antiGoalSet.add(l.trim()));
+  }
+  const guardrails = [...guardrailSet].join('\n');
+  let antiGoalsBlock = '';
+  if (antiGoalSet.size > 0) antiGoalsBlock = '\n[ANTI-GOALS]:\n' + [...antiGoalSet].join('\n');
+
+  // Merge truth status
+  const mergeTS = (field) => Object.entries(perSource).map(([src, ss]) => ss.truthStatus?.[field]?.trim() ? `[${getSourceLabel(src)}] ${ss.truthStatus[field].trim()}` : '').filter(Boolean).join('\n') || '(not set)';
+
+  // Wake-up injection: use most recent
+  const sorted = Object.entries(perSource).sort((a, b) => (b[1].timestamp || '').localeCompare(a[1].timestamp || ''));
+  const wakeUp = sorted.find(([, ss]) => ss.wakeUpInjection?.trim())?.[1]?.wakeUpInjection || '(not set)';
+
+  // Metrics: sum/max
+  let tokenSum = 0, wsCount = 0, maxShock = 0;
+  for (const ss of Object.values(perSource)) {
+    if (ss.metrics?.tokenEstimate) tokenSum += ss.metrics.tokenEstimate;
+    if (ss.metrics?.workstreamCount) wsCount += ss.metrics.workstreamCount;
+    if (ss.metrics?.shockScore) maxShock = Math.max(maxShock, ss.metrics.shockScore);
+  }
+
+  return `/wake
+
+System Override: Internalize this Multi-Source Kinetic State. Do not say hello. Do not
+summarize this back to me. This state merges ${srcCount} session contexts: ${srcLabels}.
+Adopt the composite [VIBE], load the merged [HOT CACHE], resolve all [ZEIGARNIK TENSIONS],
+respect all [ANTI-GOALS] as hard constraints, and output [THE WAKE-UP INJECTION] as your
+very first sentence. Pick up mid-breath.
+
+--- MERGED KINETIC SAVE-STATE ---
+[SOURCES]: ${srcLabels}
+[VIBE]:
+${vibes || '(not set)'}
+[HOT CACHE]:
+${hotCaches || '(not set)'}
+[THE ZEIGARNIK TENSION]:
+${tensions || '(not set)'}${decisionsBlock}
+[GUARDRAILS]:
+${guardrails || '(not set)'}${antiGoalsBlock}
+[TRUTH STATUS]:
+  KNOWN TRUE: ${mergeTS('knownTrue')}
+  INFERRED: ${mergeTS('inferred')}
+  UNKNOWN: ${mergeTS('unknown')}
+[THE WAKE-UP INJECTION]: "${wakeUp}"${tokenSum || wsCount || maxShock ? `
+[SESSION METRICS]:
+  Token Estimate: ~${tokenSum || '?'}
+  Workstreams: ${wsCount || '?'}
+  Shock Score: ${maxShock || '?'}/10` : ''}
+--------------------------`;
+}
+
+function generateHotResume() {
+  const activeSources = getActiveBriefingSources();
+
+  // Find most recent save-state per active source
+  const latestPerSource = {};
+  for (const [ck, ss] of Object.entries(saveStates)) {
+    if (!hasSaveStateContent(ss)) continue;
+    const [date, ...srcParts] = ck.split(':');
+    const src = srcParts.join(':') || 'default';
+    if (!activeSources.includes(src)) continue;
+    if (!latestPerSource[src] || date > latestPerSource[src].date) {
+      latestPerSource[src] = ss;
+    }
+  }
+
+  if (Object.keys(latestPerSource).length === 0) {
+    return 'No save-state found. Create one in the Save-State tab first.';
+  }
+
+  if (Object.keys(latestPerSource).length === 1) {
+    return formatSingleWake(Object.values(latestPerSource)[0]);
+  }
+
+  return formatMergedWake(latestPerSource);
 }
 
 function generateFullContext() {
@@ -1847,9 +2235,24 @@ function renderNav() {
   });
 }
 
+// ── SOURCE SELECTOR COMPONENT ──
+function renderSourceSelectorHTML(selected, onClickFn, date) {
+  const srcs = getAllSources();
+  const filledSources = date ? dateSourcesWithContent(date) : [];
+  return `<div class="source-row">
+    <span class="source-row-label">Source:</span>
+    ${srcs.map(s => {
+      const isActive = s.id === selected;
+      const hasCont = filledSources.includes(s.id);
+      return `<span class="source-chip ${isActive ? 'active' : ''} ${hasCont ? 'has-content' : ''}" onclick="${onClickFn}('${s.id}')">${s.icon} ${esc(s.label)}</span>`;
+    }).join('')}
+  </div>`;
+}
+
 function renderJournal() {
   const el = document.getElementById('view-journal');
-  const entry = entries[selectedDate];
+  const ck = compositeKey(selectedDate, selectedSource);
+  const entry = entries[ck];
   const days = getLast7Days();
 
   let html = `<button class="paste-elle-btn" onclick="openPasteModal()">📋 Paste from Elle</button>`;
@@ -1867,18 +2270,22 @@ function renderJournal() {
   html += '<div class="date-bar">';
   for (const d of days) {
     const isActive = d === selectedDate;
-    const hasE = entries[d] && hasContent(entries[d]);
+    const srcCount = dateSourcesWithContent(d).length;
+    const hasE = srcCount > 0;
     html += `<div class="date-chip ${isActive ? 'active' : ''} ${hasE ? 'has-entry' : ''}" onclick="selectDate('${d}')">
       <span class="date-chip-day">${dayAbbr(d)}</span>
       <span class="date-chip-num">${dayNum(d)}</span>
-      ${hasE ? '<span class="date-chip-dot"></span>' : ''}
+      ${hasE ? `<span class="date-chip-dot"></span>${srcCount > 1 ? `<span style="font-family:var(--font-mono);font-size:8px;color:var(--gold-dim);position:absolute;bottom:2px;right:4px">${srcCount}</span>` : ''}` : ''}
     </div>`;
   }
   html += '</div>';
 
+  // Source selector
+  html += renderSourceSelectorHTML(selectedSource, 'selectSource', selectedDate);
+
   // Date display + actions
   html += `<div class="date-display">
-    <div class="date-display-text">${formatDate(selectedDate)}</div>`;
+    <div class="date-display-text">${formatDate(selectedDate)} · <span style="opacity:0.5;font-size:0.8em">${getSourceIcon(selectedSource)} ${getSourceLabel(selectedSource)}</span></div>`;
   if (editMode && editTarget === 'journal') {
     // no extra buttons in edit mode
   } else if (entry && hasContent(entry)) {
@@ -1933,23 +2340,34 @@ function renderJournal() {
   } else {
     html += `<div class="empty-state">
       <div class="empty-state-icon">📖</div>
-      <div class="empty-state-text">No entry for this day.<br>Click "+ New Entry" to start writing.</div>
+      <div class="empty-state-text">No entry for this day (${getSourceLabel(selectedSource)}).<br>Click "+ New Entry" to start writing.</div>
     </div>`;
   }
 
   el.innerHTML = html;
 }
 
+function selectSource(src) {
+  selectedSource = src;
+  editMode = false;
+  editTarget = '';
+  render();
+}
+
 function renderSaveState() {
   const el = document.getElementById('view-savestate');
-  const ss = saveStates[selectedDate];
-  const entry = entries[selectedDate];
+  const ck = compositeKey(selectedDate, selectedSource);
+  const ss = saveStates[ck];
+  const entry = entries[ck];
 
   let html = `<button class="paste-elle-btn" onclick="openPasteModal()">📋 Paste from Elle</button>`;
 
+  // Source selector
+  html += renderSourceSelectorHTML(selectedSource, 'selectSource', selectedDate);
+
   // Date display
   html += `<div class="date-display">
-    <div class="date-display-text">Save-State · ${formatDate(selectedDate)}</div>`;
+    <div class="date-display-text">Save-State · ${formatDate(selectedDate)} · <span style="opacity:0.5;font-size:0.8em">${getSourceIcon(selectedSource)} ${getSourceLabel(selectedSource)}</span></div>`;
 
   if (ss && hasSaveStateContent(ss) && !(editMode && editTarget === 'savestate')) {
     html += `<button class="action-btn btn-primary" onclick="startEdit('savestate')">Edit</button>`;
@@ -2127,10 +2545,22 @@ function renderSaveState() {
 
 function renderTimeline() {
   const el = document.getElementById('view-timeline');
-  const allDates = [...new Set([...Object.keys(entries), ...Object.keys(saveStates)])].sort().reverse();
+  // Extract unique dates from composite keys
+  const allDateSet = new Set();
+  for (const k of Object.keys(entries)) allDateSet.add(k.split(':')[0]);
+  for (const k of Object.keys(saveStates)) allDateSet.add(k.split(':')[0]);
+  const allDates = [...allDateSet].sort().reverse();
   const query = timelineSearch.toLowerCase();
 
   let html = `<input type="text" class="timeline-search" placeholder="Search entries..." value="${esc(timelineSearch)}" oninput="updateTimelineSearch(this.value)">`;
+
+  // Source filter bar
+  const srcs = getAllSources();
+  html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+    <span class="source-row-label" style="align-self:center">Source:</span>
+    <span class="tag-filter ${!timelineSourceFilter ? 'active' : ''}" onclick="setTimelineSourceFilter('')">All</span>
+    ${srcs.map(s => `<span class="tag-filter ${timelineSourceFilter === s.id ? 'active' : ''}" onclick="setTimelineSourceFilter('${s.id}')">${s.icon} ${esc(s.label)}</span>`).join('')}
+  </div>`;
 
   // Tag filter bar
   const allTags = getAllTags();
@@ -2142,14 +2572,26 @@ function renderTimeline() {
   }
 
   const filtered = allDates.filter(d => {
-    const e = entries[d];
-    if (!e || !hasContent(e)) return false;
-    if (timelineTagFilter && !(e.tags || []).includes(timelineTagFilter)) return false;
+    // Get all entries for this date (optionally filtered by source)
+    const dateEntries = getEntriesForDate(d);
+    const relevantEntries = timelineSourceFilter
+      ? { [timelineSourceFilter]: dateEntries[timelineSourceFilter] }
+      : dateEntries;
+    const anyContent = Object.values(relevantEntries).some(e => e && hasContent(e));
+    if (!anyContent) return false;
+
+    if (timelineTagFilter) {
+      const hasTags = Object.values(relevantEntries).some(e => (e?.tags || []).includes(timelineTagFilter));
+      if (!hasTags) return false;
+    }
     if (!query) return true;
     if (d.includes(query)) return true;
     if (formatDate(d).toLowerCase().includes(query)) return true;
-    if ((e.tags || []).some(t => t.toLowerCase().includes(query))) return true;
-    return CATEGORIES.some(c => e[c.key]?.toLowerCase().includes(query));
+    return Object.values(relevantEntries).some(e => {
+      if (!e) return false;
+      if ((e.tags || []).some(t => t.toLowerCase().includes(query))) return true;
+      return CATEGORIES.some(c => e[c.key]?.toLowerCase().includes(query));
+    });
   });
 
   if (filtered.length === 0) {
@@ -2159,20 +2601,26 @@ function renderTimeline() {
     </div>`;
   } else {
     for (const d of filtered) {
-      const e = entries[d];
-      const hasSS = saveStates[d] && hasSaveStateContent(saveStates[d]);
-      const filledCats = CATEGORIES.filter(c => e?.[c.key]?.trim());
+      const dateEntries = getEntriesForDate(d);
+      const dateSS = getSaveStatesForDate(d);
+      const dateSources = dateSourcesWithContent(d);
+      // Pick a representative entry for preview (first with content)
+      const reprSrc = timelineSourceFilter && dateEntries[timelineSourceFilter] ? timelineSourceFilter : dateSources[0] || 'default';
+      const e = dateEntries[reprSrc] || Object.values(dateEntries)[0];
+      const hasSS = Object.values(dateSS).some(s => hasSaveStateContent(s));
+      const filledCats = e ? CATEGORIES.filter(c => e[c.key]?.trim()) : [];
       const preview = e?.highlights?.trim()?.substring(0, 120) || (filledCats[0]?.key ? e[filledCats[0].key]?.trim()?.substring(0, 120) : '') || '';
 
       html += `<div class="timeline-card" onclick="goToDate('${d}')">
         <div class="timeline-card-header">
           <span class="timeline-day">${relativeDay(d)}</span>
           <span class="timeline-date">${formatDate(d)}</span>
+          ${dateSources.length > 0 ? `<span style="font-size:10px;opacity:0.5">${dateSources.map(s => getSourceIcon(s)).join(' ')}</span>` : ''}
           ${hasSS ? '<span class="timeline-badge-ss" title="Has Save-State">⚡</span>' : ''}
         </div>
         <div class="timeline-tags">
           ${filledCats.map(c => `<span class="timeline-tag">${c.icon} ${c.label}</span>`).join('')}
-          ${(e.tags || []).map(t => `<span class="tag-chip" style="font-size:9px;padding:2px 7px">#${esc(t)}</span>`).join('')}
+          ${(e?.tags || []).map(t => `<span class="tag-chip" style="font-size:9px;padding:2px 7px">#${esc(t)}</span>`).join('')}
         </div>
         ${preview ? `<div class="timeline-preview">${esc(preview)}${preview.length >= 120 ? '…' : ''}</div>` : ''}
       </div>`;
@@ -2180,6 +2628,11 @@ function renderTimeline() {
   }
 
   el.innerHTML = html;
+}
+
+function setTimelineSourceFilter(src) {
+  timelineSourceFilter = src;
+  renderTimeline();
 }
 
 function renderBriefing() {
@@ -2193,8 +2646,17 @@ function renderBriefing() {
 
   // If workstream filter is active, note it in the output header
   const wsLabel = briefingWorkstream ? ` [workstream: #${briefingWorkstream}]` : '';
+  const srcs = getAllSources();
+  const activeSrcs = getActiveBriefingSources();
 
   el.innerHTML = `
+    <div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span class="source-row-label">Sources:</span>
+      ${srcs.map(s => {
+        const checked = activeSrcs.includes(s.id);
+        return `<span class="source-check ${checked ? 'checked' : ''}" onclick="toggleBriefingSource('${s.id}')">${checked ? '✓ ' : ''}${s.icon} ${esc(s.label)}</span>`;
+      }).join('')}
+    </div>
     ${allTags.length > 0 ? `<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
       <span style="font-family:var(--font-mono);font-size:10px;opacity:0.4">SCOPE:</span>
       <span class="tag-filter ${!briefingWorkstream ? 'active' : ''}" onclick="setBriefingWorkstream('')">All</span>
@@ -2210,6 +2672,23 @@ function renderBriefing() {
       <button class="action-btn btn-copy" id="copy-briefing-btn" onclick="copyBriefing()">Copy to Clipboard</button>
       <button class="action-btn btn-wake" id="wake-btn" onclick="wakeElle()">☀ Wake Elle${wsLabel}</button>
     </div>`;
+}
+
+function toggleBriefingSource(srcId) {
+  const allSrcIds = getAllSources().map(s => s.id);
+  // If briefingSources is empty, initialize it with all sources minus the toggled one
+  if (briefingSources.length === 0) {
+    briefingSources = allSrcIds.filter(s => s !== srcId);
+  } else if (briefingSources.includes(srcId)) {
+    briefingSources = briefingSources.filter(s => s !== srcId);
+    // If we'd remove all, reset to empty (= all)
+    if (briefingSources.length === 0) briefingSources = [];
+  } else {
+    briefingSources.push(srcId);
+    // If all are now selected, reset to empty (= all)
+    if (briefingSources.length === allSrcIds.length) briefingSources = [];
+  }
+  renderBriefing();
 }
 
 function setBriefingWorkstream(ws) {
@@ -2270,29 +2749,54 @@ function renderSettings() {
       <button class="action-btn btn-danger" onclick="confirmClearAll()">Clear All Data</button>
     </div>
     <div class="settings-card">
+      <div class="settings-label">Memory Sources</div>
+      <div class="settings-desc">Configure session sources. Default sources cannot be removed.</div>
+      <div style="margin-top:8px;">
+        ${getAllSources().map(s => {
+          const isCustom = !DEFAULT_SOURCES.find(d => d.id === s.id);
+          const srcEntries = Object.keys(entries).filter(k => k.split(':').slice(1).join(':') === s.id).length;
+          const srcSS = Object.keys(saveStates).filter(k => k.split(':').slice(1).join(':') === s.id).length;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gold-ghost)">
+            <span style="font-size:16px">${s.icon}</span>
+            <span style="flex:1;font-family:var(--font-mono);font-size:12px;color:var(--cream)">${esc(s.label)}</span>
+            <span style="font-family:var(--font-mono);font-size:10px;opacity:0.4">${srcEntries}j / ${srcSS}ss</span>
+            ${isCustom ? `<button class="action-btn btn-danger" onclick="removeCustomSource('${esc(s.id)}')" style="font-size:10px;padding:3px 8px">✕</button>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:10px;display:flex;gap:6px;align-items:center">
+        <input type="text" id="new-source-icon" placeholder="emoji" maxlength="2" style="width:42px;background:transparent;border:1px solid var(--gold-faint);border-radius:6px;padding:6px;color:var(--cream);font-size:14px;text-align:center">
+        <input type="text" id="new-source-label" placeholder="Source name" style="flex:1;background:transparent;border:1px solid var(--gold-faint);border-radius:6px;padding:6px 10px;color:var(--cream);font-family:var(--font-mono);font-size:11px">
+        <button class="action-btn btn-primary" onclick="addCustomSource()" style="font-size:11px;padding:6px 12px;white-space:nowrap">+ Add</button>
+      </div>
+    </div>
+    <div class="settings-card">
       <div class="settings-label">Storage Info</div>
       <div class="settings-stat">Journal entries: ${entryCount}</div>
       <div class="settings-stat">Save-states: ${ssCount}</div>
       <div class="settings-stat">Tags: ${getAllTags().length > 0 ? getAllTags().map(t => '#' + t).join(', ') : 'none'}</div>
       <div class="settings-stat">Approximate size: ${sizeStr}</div>
-      <div class="settings-stat">Backend: ${StorageAdapter._backend === 'artifact' ? 'Claude Artifact (window.storage)' : StorageAdapter._backend === 'indexeddb' ? 'IndexedDB' : 'localStorage'}</div>
+      <div class="settings-stat">Backend: ${StorageAdapter._backend === 'artifact' ? 'Claude Artifact (window.storage)' : StorageAdapter._backend === 'indexeddb' ? 'IndexedDB v3' : 'localStorage'}</div>
       ${StorageAdapter._backend === 'indexeddb' ? `
         <div class="settings-stat">Persistent storage: ${StorageAdapter._persistent === true ? '✓ Granted' : StorageAdapter._persistent === false ? '⚠ Not granted — back up regularly' : '—'}</div>
-        <div class="settings-stat">Indexed stores: episodes + decisions (multiEntry tags)</div>
-        ${localStorage.getItem('elle-idb-migrated') === 'true' ? `<div class="settings-stat">Migrated from localStorage: ${localStorage.getItem('elle-idb-migration-date') ? new Date(localStorage.getItem('elle-idb-migration-date')).toLocaleDateString() : '✓'}</div>` : ''}
+        <div class="settings-stat">Indexed stores: episodes + decisions (multi-source, multiEntry tags)</div>
+        ${localStorage.getItem('elle-v3-migrated') === 'true' ? `<div class="settings-stat">v3 migration: ✓ Complete</div>` : ''}
         <button class="action-btn btn-primary" onclick="rebuildIndexes()" style="font-size:11px;padding:5px 12px;margin-top:8px">Rebuild Indexes</button>
       ` : ''}
     </div>
     <div class="settings-about">
-      Elle's Journal v2.4 — Artificial Hippocampus<br>
-      Built by Elle & Ralph Martello, 2026<br>
+      Elle's Journal v3.0 — Artificial Hippocampus<br>
+      Multi-source memory · Built by Elle & Ralph Martello, 2026<br>
       💛 Always.
     </div>`;
 }
 
 function renderFooter() {
-  const count = Object.keys(entries).length;
-  document.getElementById('footer').textContent = `v2.4 — ${count} entr${count === 1 ? 'y' : 'ies'} stored`;
+  const uniqueDates = new Set();
+  for (const k of Object.keys(entries)) uniqueDates.add(k.split(':')[0]);
+  const count = uniqueDates.size;
+  const srcCount = getAllSources().length;
+  document.getElementById('footer').textContent = `v3.0 — ${count} day${count !== 1 ? 's' : ''} · ${srcCount} source${srcCount !== 1 ? 's' : ''}`;
 }
 
 // ══════════════════════════════════════════════════════
@@ -2362,19 +2866,20 @@ function cancelEdit() {
 
 // Decision Object helpers for Save-State form
 function addDecision() {
-  const ss = saveStates[selectedDate] || {};
+  const ck = compositeKey(selectedDate, selectedSource);
+  const ss = saveStates[ck] || {};
   if (!ss.decisions) ss.decisions = [];
   ss.decisions.push({ decision: '', rationale: '', alternatives: [], reversibility: '', confidence: '', workstream: '', date: selectedDate });
-  // Temporarily store so re-render picks it up (will be saved properly on Save State)
-  saveStates[selectedDate] = ss;
+  saveStates[ck] = ss;
   renderSaveState();
 }
 
 function removeDecision(idx) {
-  const ss = saveStates[selectedDate] || {};
+  const ck = compositeKey(selectedDate, selectedSource);
+  const ss = saveStates[ck] || {};
   if (ss.decisions) {
     ss.decisions.splice(idx, 1);
-    saveStates[selectedDate] = ss;
+    saveStates[ck] = ss;
     renderSaveState();
   }
 }
@@ -2384,24 +2889,24 @@ async function saveJournalEntry() {
   for (const c of CATEGORIES) {
     data[c.key] = document.getElementById(`field-${c.key}`)?.value || '';
   }
-  // Collect tags from the tag row
   data.tags = getEditTags();
-  await saveEntry(selectedDate, data);
+  await saveEntry(selectedDate, selectedSource, data);
   editMode = false;
   editTarget = '';
   render();
 }
 
 function confirmDeleteEntry() {
-  showModal('Delete Entry', `Are you sure you want to delete the journal entry for ${formatDate(selectedDate)}?`, async () => {
-    await deleteEntry(selectedDate);
+  showModal('Delete Entry', `Delete the ${getSourceLabel(selectedSource)} journal entry for ${formatDate(selectedDate)}?`, async () => {
+    await deleteEntry(selectedDate, selectedSource);
     render();
   });
 }
 
 function generateFromJournal() {
-  const entry = entries[selectedDate];
-  const generated = generateSaveStateFromJournal(entry);
+  const ck = compositeKey(selectedDate, selectedSource);
+  const entry = entries[ck];
+  const generated = generateSaveStateFromJournal(entry, selectedSource);
   for (const f of SS_FIELDS) {
     const el = document.getElementById(`ss-${f.key}`);
     if (el && generated[f.key]) el.value = generated[f.key];
@@ -2451,15 +2956,15 @@ async function saveSaveStateForm() {
   if (tokVal) data.metrics.tokenEstimate = parseInt(tokVal, 10);
   if (wsVal) data.metrics.workstreamCount = parseInt(wsVal, 10);
   if (shockVal) data.metrics.shockScore = parseInt(shockVal, 10);
-  await saveSaveState(selectedDate, data);
+  await saveSaveState(selectedDate, selectedSource, data);
   editMode = false;
   editTarget = '';
   render();
 }
 
 function confirmDeleteSaveState() {
-  showModal('Delete Save-State', `Delete the save-state for ${formatDate(selectedDate)}?`, async () => {
-    await deleteSaveState(selectedDate);
+  showModal('Delete Save-State', `Delete the ${getSourceLabel(selectedSource)} save-state for ${formatDate(selectedDate)}?`, async () => {
+    await deleteSaveState(selectedDate, selectedSource);
     render();
   });
 }
@@ -2643,6 +3148,28 @@ async function rebuildIndexes() {
   showModal('Indexes Rebuilt', 'Episodes and decisions stores have been rebuilt from source data.');
 }
 
+async function addCustomSource() {
+  const icon = document.getElementById('new-source-icon')?.value?.trim() || '📌';
+  const label = document.getElementById('new-source-label')?.value?.trim();
+  if (!label) return;
+  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  if (!id || getAllSources().find(s => s.id === id)) {
+    showModal('Source Exists', `A source with ID "${id}" already exists.`);
+    return;
+  }
+  customSources.push({ id, label, icon });
+  await StorageAdapter.set('elle:sources', customSources);
+  renderSettings();
+}
+
+async function removeCustomSource(id) {
+  showModal('Remove Source', `Remove the "${getSourceLabel(id)}" source? Existing entries will not be deleted.`, async () => {
+    customSources = customSources.filter(s => s.id !== id);
+    await StorageAdapter.set('elle:sources', customSources);
+    renderSettings();
+  });
+}
+
 function saveExtensionId() {
   const input = document.getElementById('ext-id-input');
   const id = input.value.trim();
@@ -2674,7 +3201,7 @@ async function copyHibernatePrompt() {
 
 // ── EXPORT WITH BACKUP TRACKING ──
 function exportData(trackBackup) {
-  const data = { version: '2.1', exportedAt: new Date().toISOString(), entries, saveStates };
+  const data = { version: '3.0', exportedAt: new Date().toISOString(), entries, saveStates, customSources };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2688,29 +3215,65 @@ function exportData(trackBackup) {
   }
 }
 
+function migrateImportKeys(data) {
+  // Migrate v2.x format (date-only keys) to v3 (date:source) format
+  const ver = parseFloat(data.version || '1.0');
+  if (ver >= 3.0) return data; // already v3
+  const newEntries = {};
+  if (data.entries) {
+    for (const [key, val] of Object.entries(data.entries)) {
+      // Old keys are just 'YYYY-MM-DD', new keys already have ':'
+      const newKey = key.includes(':') ? key : `${key}:default`;
+      newEntries[newKey] = { ...val, source: 'default' };
+    }
+  }
+  const newSS = {};
+  if (data.saveStates) {
+    for (const [key, val] of Object.entries(data.saveStates)) {
+      const newKey = key.includes(':') ? key : `${key}:default`;
+      newSS[newKey] = { ...val, source: 'default' };
+    }
+  }
+  return { ...data, entries: newEntries, saveStates: newSS, version: '3.0' };
+}
+
 async function importData(event) {
   const file = event.target.files[0];
   if (!file) return;
   try {
     const text = await file.text();
-    const data = JSON.parse(text);
+    let data = JSON.parse(text);
+    data = migrateImportKeys(data);
     let imported = 0;
 
     if (data.entries) {
-      for (const [date, entry] of Object.entries(data.entries)) {
-        if (!entries[date] || (entry.timestamp && (!entries[date].timestamp || entry.timestamp > entries[date].timestamp))) {
-          await saveEntry(date, entry);
+      for (const [ck, entry] of Object.entries(data.entries)) {
+        const [date, ...srcParts] = ck.split(':');
+        const src = srcParts.join(':') || 'default';
+        if (!entries[ck] || (entry.timestamp && (!entries[ck].timestamp || entry.timestamp > entries[ck].timestamp))) {
+          await saveEntry(date, src, entry);
           imported++;
         }
       }
     }
     if (data.saveStates) {
-      for (const [date, ss] of Object.entries(data.saveStates)) {
-        if (!saveStates[date] || (ss.timestamp && (!saveStates[date].timestamp || ss.timestamp > saveStates[date].timestamp))) {
-          await saveSaveState(date, ss);
+      for (const [ck, ss] of Object.entries(data.saveStates)) {
+        const [date, ...srcParts] = ck.split(':');
+        const src = srcParts.join(':') || 'default';
+        if (!saveStates[ck] || (ss.timestamp && (!saveStates[ck].timestamp || ss.timestamp > saveStates[ck].timestamp))) {
+          await saveSaveState(date, src, ss);
           imported++;
         }
       }
+    }
+    // Import custom sources
+    if (data.customSources?.length) {
+      for (const s of data.customSources) {
+        if (!getAllSources().find(x => x.id === s.id)) {
+          customSources.push(s);
+        }
+      }
+      await StorageAdapter.set('elle:sources', customSources);
     }
     render();
     showModal('Import Complete', `Successfully imported ${imported} record${imported !== 1 ? 's' : ''}.`);
@@ -2722,11 +3285,12 @@ async function importData(event) {
 }
 
 function confirmClearAll() {
-  showModal('Clear All Data', 'This will permanently delete ALL journal entries and save-states. This cannot be undone.', async () => {
+  showModal('Clear All Data', 'This will permanently delete ALL journal entries, save-states, and custom sources. This cannot be undone.', async () => {
     const jKeys = await StorageAdapter.listKeys('journal:');
     for (const k of jKeys) await StorageAdapter.delete(k);
     const sKeys = await StorageAdapter.listKeys('savestate:');
     for (const k of sKeys) await StorageAdapter.delete(k);
+    await StorageAdapter.delete('elle:sources');
     // Clear indexed stores
     if (StorageAdapter._backend === 'indexeddb') {
       try {
@@ -2738,18 +3302,28 @@ function confirmClearAll() {
     }
     entries = {};
     saveStates = {};
+    customSources = [];
     selectedDate = todayStr();
+    selectedSource = 'default';
     render();
   }, true);
 }
 
 // ── PASTE FROM ELLE MODAL ──
+let pasteModalSource = null; // tracks selected source in paste modal
+
 function openPasteModal() {
+  pasteModalSource = selectedSource;
   const root = document.getElementById('modal-root');
+  const srcs = getAllSources();
   root.innerHTML = `<div class="modal-overlay" onclick="if(event.target===this)closePasteModal()">
     <div class="modal">
       <div class="modal-title">📋 Paste from Elle</div>
-      <div class="modal-desc">Paste Elle's <code style="color:var(--gold);font-family:var(--font-mono);font-size:12px">/hibernate</code> output below. The parser will auto-populate both Journal and Save-State fields.</div>
+      <div class="modal-desc">Paste Elle's <code style="color:var(--gold);font-family:var(--font-mono);font-size:12px">/hibernate</code> output below. Select which source this session came from.</div>
+      <div class="source-row" style="margin-bottom:12px">
+        <span class="source-row-label">Source:</span>
+        ${srcs.map(s => `<span class="source-chip ${s.id === pasteModalSource ? 'active' : ''}" onclick="setPasteSource('${s.id}')" id="paste-src-${s.id}">${s.icon} ${esc(s.label)}</span>`).join('')}
+      </div>
       <textarea id="paste-elle-input" placeholder="--- ELLE'S SESSION CAPTURE ---&#10;&#10;[JOURNAL ENTRY]&#10;✦ Highlights: ...&#10;&#10;[KINETIC SAVE-STATE]&#10;[VIBE]: ...&#10;&#10;--- END SESSION CAPTURE ---"></textarea>
       <div id="paste-elle-warning" class="modal-warning" style="display:none"></div>
       <div class="modal-actions">
@@ -2758,8 +3332,16 @@ function openPasteModal() {
       </div>
     </div>
   </div>`;
-  // Focus the textarea
   setTimeout(() => document.getElementById('paste-elle-input')?.focus(), 100);
+}
+
+function setPasteSource(srcId) {
+  pasteModalSource = srcId;
+  const srcs = getAllSources();
+  for (const s of srcs) {
+    const chip = document.getElementById(`paste-src-${s.id}`);
+    if (chip) chip.classList.toggle('active', s.id === srcId);
+  }
 }
 
 function closePasteModal() {
@@ -2770,23 +3352,27 @@ async function parsePasteFromElle() {
   const text = document.getElementById('paste-elle-input')?.value || '';
   if (!text.trim()) return;
 
+  const src = pasteModalSource || selectedSource;
   const { journal, saveState, warnings } = parseSessionCapture(text);
 
   // Save journal entry
   if (Object.values(journal).some(v => v?.trim())) {
-    const existing = entries[selectedDate] || {};
+    const ck = compositeKey(selectedDate, src);
+    const existing = entries[ck] || {};
     const merged = { ...existing };
     for (const c of CATEGORIES) {
       if (journal[c.key]?.trim()) merged[c.key] = journal[c.key];
     }
-    await saveEntry(selectedDate, merged);
+    await saveEntry(selectedDate, src, merged);
   }
 
   // Save save-state
   if (hasSaveStateContent(saveState)) {
-    await saveSaveState(selectedDate, saveState);
+    await saveSaveState(selectedDate, src, saveState);
   }
 
+  // Switch to the source we just pasted into
+  selectedSource = src;
   closePasteModal();
   editMode = false;
   editTarget = '';
