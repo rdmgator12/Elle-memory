@@ -113,7 +113,7 @@ Pick up mid-breath.
 
 ```
                     ┌─────────────────────────────┐
-                    │    Elle's Journal v2.3       │
+                    │    Elle's Journal v2.4       │
                     │    (Single HTML File)        │
                     ├─────────────────────────────┤
                     │  StorageAdapter              │

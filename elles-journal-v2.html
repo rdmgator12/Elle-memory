@@ -762,6 +762,7 @@ input[type="file"] { display: none; }
     <button class="nav-btn active" data-view="journal">Journal</button>
     <button class="nav-btn" data-view="savestate">Save-State</button>
     <button class="nav-btn" data-view="timeline">Timeline</button>
+    <button class="nav-btn" data-view="workstreams">Workstreams</button>
     <button class="nav-btn briefing" data-view="briefing">☀ Briefing</button>
     <button class="nav-btn settings-btn" data-view="settings">⚙</button>
   </nav>
@@ -771,6 +772,7 @@ input[type="file"] { display: none; }
   <div id="view-journal" class="view active"></div>
   <div id="view-savestate" class="view"></div>
   <div id="view-timeline" class="view"></div>
+  <div id="view-workstreams" class="view"></div>
   <div id="view-briefing" class="view"></div>
   <div id="view-settings" class="view"></div>
 </main>
@@ -802,14 +804,34 @@ const SS_FIELDS = [
   { key: 'antiGoals',        icon: '⛔', label: 'Anti-Goals',         placeholder: 'Do NOT refactor X — it works. Do NOT reopen Y debate — decided.' },
 ];
 
-// ── STORAGE ADAPTER (v2.3 — IndexedDB / localStorage / artifact) ──
+// ── STORAGE ADAPTER (v2.4 — IndexedDB v2 / localStorage / artifact) ──
+
+// Helper: build episode record from journal entry + save-state for a date
+function buildEpisodeRecord(date, entry, saveState) {
+  const tags = new Set();
+  if (entry?.tags) entry.tags.forEach(t => tags.add(t));
+  if (saveState?.tags) saveState.tags.forEach(t => tags.add(t));
+  if (saveState?.decisions) saveState.decisions.forEach(d => { if (d.workstream) tags.add(d.workstream); });
+  return {
+    date,
+    tags: [...tags],
+    highlights: entry?.highlights || '', builds: entry?.builds || '',
+    decisions: entry?.decisions || '', openThreads: entry?.openThreads || '',
+    momentum: entry?.momentum || '', personal: entry?.personal || '', vibe: entry?.vibe || '',
+    hasJournal: !!entry && CATEGORIES.some(c => entry[c.key]?.trim()),
+    hasSaveState: !!saveState,
+    decisionCount: saveState?.decisions?.length || 0,
+    timestamp: entry?.timestamp || saveState?.timestamp || new Date().toISOString()
+  };
+}
+
 const StorageAdapter = {
   isArtifact: typeof window.storage !== 'undefined',
   _backend: null,      // 'artifact' | 'indexeddb' | 'localstorage'
   _db: null,           // IDBDatabase reference
   _persistent: null,   // navigator.storage.persist() result
 
-  // ── Init: detect backend, open DB, migrate ──
+  // ── Init: detect backend, open DB, migrate, populate indexes ──
   async init() {
     if (this.isArtifact) { this._backend = 'artifact'; return; }
     try {
@@ -819,12 +841,14 @@ const StorageAdapter = {
       if (localStorage.getItem('elle-idb-migrated') !== 'true') {
         await this._migrateFromLocalStorage();
       }
+      // Populate indexed stores if needed (v1→v2 upgrade or first run)
+      await this._populateIndexedStores();
       // Request persistent storage to prevent eviction
       if (navigator.storage && navigator.storage.persist) {
         try { this._persistent = await navigator.storage.persist(); }
         catch { this._persistent = false; }
       }
-      console.log(`Hippocampus online: IndexedDB (persistent: ${this._persistent})`);
+      console.log(`Hippocampus online: IndexedDB v2 (persistent: ${this._persistent})`);
     } catch (err) {
       console.warn('IndexedDB unavailable, falling back to localStorage:', err.message || err);
       this._backend = 'localstorage';
@@ -832,14 +856,30 @@ const StorageAdapter = {
     }
   },
 
-  // ── Open/create the IndexedDB database ──
+  // ── Open/create the IndexedDB database (schema v2) ──
   _openDB() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('elle-journal', 1);
+      const request = indexedDB.open('elle-journal', 2);
       request.onupgradeneeded = (e) => {
         const db = e.target.result;
-        if (!db.objectStoreNames.contains('kv')) {
-          db.createObjectStore('kv', { keyPath: 'key' });
+        const oldVersion = e.oldVersion;
+        // v0 → v1: create kv store
+        if (oldVersion < 1) {
+          if (!db.objectStoreNames.contains('kv')) {
+            db.createObjectStore('kv', { keyPath: 'key' });
+          }
+        }
+        // v1 → v2: create indexed stores
+        if (oldVersion < 2) {
+          if (!db.objectStoreNames.contains('episodes')) {
+            const epStore = db.createObjectStore('episodes', { keyPath: 'date' });
+            epStore.createIndex('tags', 'tags', { unique: false, multiEntry: true });
+          }
+          if (!db.objectStoreNames.contains('decisions')) {
+            const decStore = db.createObjectStore('decisions', { keyPath: 'id' });
+            decStore.createIndex('workstream', 'workstream', { unique: false });
+            decStore.createIndex('date', 'date', { unique: false });
+          }
         }
       };
       request.onsuccess = (e) => resolve(e.target.result);
@@ -848,15 +888,13 @@ const StorageAdapter = {
     });
   },
 
-  // ── Migrate localStorage journal/savestate data into IndexedDB ──
+  // ── Migrate localStorage → kv store ──
   _migrateFromLocalStorage() {
     return new Promise((resolve, reject) => {
       const keysToMigrate = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k.startsWith('journal:') || k.startsWith('savestate:')) {
-          keysToMigrate.push(k);
-        }
+        if (k.startsWith('journal:') || k.startsWith('savestate:')) keysToMigrate.push(k);
       }
       if (keysToMigrate.length === 0) {
         localStorage.setItem('elle-idb-migrated', 'true');
@@ -878,25 +916,81 @@ const StorageAdapter = {
       };
       tx.onerror = (e) => {
         console.error('Migration failed, reverting to localStorage:', e.target.error);
-        this._backend = 'localstorage';
-        this._db = null;
-        resolve(); // resolve (not reject) so boot continues on localStorage
+        this._backend = 'localstorage'; this._db = null; resolve();
       };
       tx.onabort = (e) => {
         console.error('Migration aborted, reverting to localStorage:', e.target.error);
-        this._backend = 'localstorage';
-        this._db = null;
-        resolve();
+        this._backend = 'localstorage'; this._db = null; resolve();
       };
     });
   },
 
-  // ── Convenience: get object store from a transaction ──
+  // ── Populate episodes + decisions stores from kv (runs once per schema version) ──
+  async _populateIndexedStores() {
+    if (localStorage.getItem('elle-indexed-populated') === '2') return;
+    if (this._backend !== 'indexeddb') return;
+    try {
+      // Read all kv records
+      const allKV = await new Promise((resolve, reject) => {
+        const records = [];
+        const tx = this._db.transaction('kv', 'readonly');
+        const req = tx.objectStore('kv').openCursor();
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) { records.push(cursor.value); cursor.continue(); }
+          else resolve(records);
+        };
+        req.onerror = (e) => reject(e.target.error);
+      });
+
+      // Sort into journals and save-states
+      const journalMap = {}, ssMap = {};
+      for (const rec of allKV) {
+        if (rec.key.startsWith('journal:')) {
+          const date = rec.key.replace('journal:', '');
+          journalMap[date] = JSON.parse(rec.value);
+        } else if (rec.key.startsWith('savestate:')) {
+          const date = rec.key.replace('savestate:', '');
+          ssMap[date] = JSON.parse(rec.value);
+        }
+      }
+
+      // Build and write episodes + decisions in a single transaction
+      const allDates = new Set([...Object.keys(journalMap), ...Object.keys(ssMap)]);
+      const tx = this._db.transaction(['episodes', 'decisions'], 'readwrite');
+      const epStore = tx.objectStore('episodes');
+      const decStore = tx.objectStore('decisions');
+      epStore.clear(); decStore.clear();
+
+      for (const date of allDates) {
+        const entry = journalMap[date] || null;
+        const ss = ssMap[date] || null;
+        epStore.put(buildEpisodeRecord(date, entry, ss));
+        if (ss?.decisions) {
+          ss.decisions.forEach((dec, i) => {
+            if (dec.decision) decStore.put({ id: `${date}:${i}`, date, ...dec, timestamp: ss.timestamp });
+          });
+        }
+      }
+
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = (e) => reject(e.target.error);
+      });
+
+      localStorage.setItem('elle-indexed-populated', '2');
+      console.log(`Indexed stores populated: ${allDates.size} episodes, from kv.`);
+    } catch (err) {
+      console.warn('Index population failed (will use in-memory fallback):', err.message || err);
+    }
+  },
+
+  // ── Convenience: get kv object store ──
   _store(mode) {
     return this._db.transaction('kv', mode).objectStore('kv');
   },
 
-  // ── Core API (same signatures as v2.2) ──
+  // ── Core API (unchanged signatures) ──
 
   async get(key) {
     if (this._backend === 'artifact') {
@@ -971,6 +1065,157 @@ const StorageAdapter = {
       if (k.startsWith(prefix)) keys.push(k);
     }
     return keys;
+  },
+
+  // ── Dual-write: episodes + decisions (no-op on non-IndexedDB backends) ──
+
+  async writeEpisode(date, entry, saveState) {
+    if (this._backend !== 'indexeddb') return;
+    try {
+      const record = buildEpisodeRecord(date, entry, saveState);
+      return new Promise((resolve, reject) => {
+        const tx = this._db.transaction('episodes', 'readwrite');
+        tx.objectStore('episodes').put(record);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    } catch { /* silent */ }
+  },
+
+  async deleteEpisode(date) {
+    if (this._backend !== 'indexeddb') return;
+    try {
+      return new Promise((resolve, reject) => {
+        const tx = this._db.transaction('episodes', 'readwrite');
+        tx.objectStore('episodes').delete(date);
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    } catch { /* silent */ }
+  },
+
+  async writeDecisions(date, decisions, timestamp) {
+    if (this._backend !== 'indexeddb') return;
+    try {
+      return new Promise((resolve, reject) => {
+        const tx = this._db.transaction('decisions', 'readwrite');
+        const store = tx.objectStore('decisions');
+        // Delete existing decisions for this date via index cursor
+        const dateIdx = store.index('date');
+        const delReq = dateIdx.openKeyCursor(IDBKeyRange.only(date));
+        delReq.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
+        };
+        // Insert new decisions (runs after deletes within same transaction)
+        decisions.forEach((dec, i) => {
+          if (dec.decision) store.put({ id: `${date}:${i}`, date, ...dec, timestamp });
+        });
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    } catch { /* silent */ }
+  },
+
+  async deleteDecisionsForDate(date) {
+    if (this._backend !== 'indexeddb') return;
+    try {
+      return new Promise((resolve, reject) => {
+        const tx = this._db.transaction('decisions', 'readwrite');
+        const store = tx.objectStore('decisions');
+        const dateIdx = store.index('date');
+        const req = dateIdx.openKeyCursor(IDBKeyRange.only(date));
+        req.onsuccess = (e) => {
+          const cursor = e.target.result;
+          if (cursor) { store.delete(cursor.primaryKey); cursor.continue(); }
+        };
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = (e) => reject(e.target.error);
+      });
+    } catch { /* silent */ }
+  },
+
+  // ── Indexed queries (with in-memory fallbacks) ──
+
+  async getEpisodesByTag(tag) {
+    if (this._backend === 'indexeddb') {
+      try {
+        return new Promise((resolve, reject) => {
+          const results = [];
+          const tx = this._db.transaction('episodes', 'readonly');
+          const idx = tx.objectStore('episodes').index('tags');
+          const req = idx.openCursor(IDBKeyRange.only(tag));
+          req.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) { results.push(cursor.value); cursor.continue(); }
+            else resolve(results.sort((a, b) => b.date.localeCompare(a.date)));
+          };
+          req.onerror = (e) => reject(e.target.error);
+        });
+      } catch { /* fall through to in-memory */ }
+    }
+    // In-memory fallback
+    return Object.values(entries)
+      .filter(e => (e.tags || []).includes(tag))
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  },
+
+  async getDecisionsByWorkstream(workstream) {
+    if (this._backend === 'indexeddb') {
+      try {
+        return new Promise((resolve, reject) => {
+          const results = [];
+          const tx = this._db.transaction('decisions', 'readonly');
+          const idx = tx.objectStore('decisions').index('workstream');
+          const req = idx.openCursor(IDBKeyRange.only(workstream));
+          req.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) { results.push(cursor.value); cursor.continue(); }
+            else resolve(results.sort((a, b) => b.date.localeCompare(a.date)));
+          };
+          req.onerror = (e) => reject(e.target.error);
+        });
+      } catch { /* fall through */ }
+    }
+    const results = [];
+    for (const ss of Object.values(saveStates)) {
+      if (ss.decisions) ss.decisions.forEach(d => {
+        if (d.workstream === workstream) results.push({ ...d, date: ss.date });
+      });
+    }
+    return results.sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  async getDecisionsByDateRange(from, to) {
+    if (this._backend === 'indexeddb') {
+      try {
+        return new Promise((resolve, reject) => {
+          const results = [];
+          const tx = this._db.transaction('decisions', 'readonly');
+          const idx = tx.objectStore('decisions').index('date');
+          const req = idx.openCursor(IDBKeyRange.bound(from, to));
+          req.onsuccess = (e) => {
+            const cursor = e.target.result;
+            if (cursor) { results.push(cursor.value); cursor.continue(); }
+            else resolve(results.sort((a, b) => b.date.localeCompare(a.date)));
+          };
+          req.onerror = (e) => reject(e.target.error);
+        });
+      } catch { /* fall through */ }
+    }
+    const results = [];
+    for (const ss of Object.values(saveStates)) {
+      if (ss.date >= from && ss.date <= to && ss.decisions) {
+        ss.decisions.forEach(d => { if (d.decision) results.push({ ...d, date: ss.date }); });
+      }
+    }
+    return results.sort((a, b) => b.date.localeCompare(a.date));
+  },
+
+  async rebuildIndexedStores() {
+    if (this._backend !== 'indexeddb') return;
+    localStorage.removeItem('elle-indexed-populated');
+    await this._populateIndexedStores();
   }
 };
 
@@ -985,6 +1230,9 @@ let briefingMode = 'structured';
 let timelineSearch = '';
 let weekOffset = 0;        // 0 = current week, -1 = last week, etc.
 let timelineTagFilter = ''; // filter timeline by tag
+let workstreamView = 'overview'; // 'overview' | 'detail'
+let selectedWorkstream = '';     // tag name when drilling in
+let briefingWorkstream = '';     // workstream filter for briefing
 
 // ── DATE HELPERS ──
 function todayStr() {
@@ -1142,23 +1390,41 @@ async function saveEntry(date, data) {
   data.timestamp = new Date().toISOString();
   entries[date] = data;
   await StorageAdapter.set(`journal:${date}`, data);
+  await StorageAdapter.writeEpisode(date, data, saveStates[date] || null);
 }
 
 async function deleteEntry(date) {
   delete entries[date];
   await StorageAdapter.delete(`journal:${date}`);
+  if (saveStates[date]) {
+    await StorageAdapter.writeEpisode(date, null, saveStates[date]);
+  } else {
+    await StorageAdapter.deleteEpisode(date);
+  }
 }
 
 async function saveSaveState(date, data) {
   data.date = date;
   data.timestamp = new Date().toISOString();
+  // Auto-derive tags from decision workstreams
+  const wsSet = new Set(data.tags || []);
+  if (data.decisions) data.decisions.forEach(d => { if (d.workstream) wsSet.add(d.workstream); });
+  data.tags = [...wsSet];
   saveStates[date] = data;
   await StorageAdapter.set(`savestate:${date}`, data);
+  await StorageAdapter.writeEpisode(date, entries[date] || null, data);
+  await StorageAdapter.writeDecisions(date, data.decisions || [], data.timestamp);
 }
 
 async function deleteSaveState(date) {
   delete saveStates[date];
   await StorageAdapter.delete(`savestate:${date}`);
+  if (entries[date] && hasContent(entries[date])) {
+    await StorageAdapter.writeEpisode(date, entries[date], null);
+  } else {
+    await StorageAdapter.deleteEpisode(date);
+  }
+  await StorageAdapter.deleteDecisionsForDate(date);
 }
 
 // ── GENERATE FROM JOURNAL ──
@@ -1313,6 +1579,120 @@ function parseSessionCapture(text) {
   return { journal, saveState: ss, warnings };
 }
 
+// ── WORKSTREAMS DASHBOARD ──
+async function renderWorkstreams() {
+  const el = document.getElementById('view-workstreams');
+  if (workstreamView === 'detail' && selectedWorkstream) {
+    return renderWorkstreamDetail(el);
+  }
+
+  const allTags = getAllTags();
+  const stats = [];
+  for (const tag of allTags) {
+    const episodes = await StorageAdapter.getEpisodesByTag(tag);
+    const decisions = await StorageAdapter.getDecisionsByWorkstream(tag);
+    const dates = episodes.map(ep => ep.date).sort();
+    stats.push({
+      tag, episodeCount: episodes.length, decisionCount: decisions.length,
+      first: dates[0] || '', last: dates[dates.length - 1] || ''
+    });
+  }
+  stats.sort((a, b) => b.last.localeCompare(a.last)); // most recent first
+
+  let html = `<div class="date-display"><div class="date-display-text">Workstream Dashboard</div></div>`;
+  if (stats.length === 0) {
+    html += `<div class="empty-state"><div class="empty-state-icon">🏷</div>
+      <div class="empty-state-text">No workstream tags yet.<br>Add tags to journal entries or workstream fields to decisions.</div></div>`;
+  } else {
+    for (const s of stats) {
+      html += `<div class="timeline-card" onclick="drillIntoWorkstream('${esc(s.tag)}')" style="cursor:pointer">
+        <div class="timeline-card-header">
+          <span class="timeline-day" style="color:var(--gold-bright)">#${esc(s.tag)}</span>
+          <span class="timeline-date">${s.first && s.last ? (s.first === s.last ? formatDate(s.first) : formatDate(s.first) + ' — ' + formatDate(s.last)) : ''}</span>
+        </div>
+        <div style="display:flex;gap:16px;font-family:var(--font-mono);font-size:11px;margin-top:4px">
+          <span style="color:var(--gold)">${s.episodeCount} episode${s.episodeCount !== 1 ? 's' : ''}</span>
+          <span style="color:var(--cream-dim)">${s.decisionCount} decision${s.decisionCount !== 1 ? 's' : ''}</span>
+        </div>
+      </div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+async function renderWorkstreamDetail(el) {
+  const tag = selectedWorkstream;
+  const episodes = await StorageAdapter.getEpisodesByTag(tag);
+  const decisions = await StorageAdapter.getDecisionsByWorkstream(tag);
+
+  let html = `<div class="date-display"><div class="date-display-text">
+    <span style="cursor:pointer;opacity:0.5" onclick="backToWorkstreams()">Workstreams</span> / <span style="color:var(--gold-bright)">#${esc(tag)}</span>
+  </div></div>`;
+
+  html += `<div style="display:flex;gap:16px;margin-bottom:20px;font-family:var(--font-mono);font-size:12px">
+    <span style="color:var(--gold)">${episodes.length} episode${episodes.length !== 1 ? 's' : ''}</span>
+    <span style="color:var(--cream-dim)">${decisions.length} decision${decisions.length !== 1 ? 's' : ''}</span>
+  </div>`;
+
+  // Decisions section
+  if (decisions.length > 0) {
+    html += `<div class="savestate-section" style="margin-bottom:24px">
+      <div class="section-header"><span class="section-icon">⚖</span>Decisions</div>`;
+    for (const d of decisions) {
+      html += `<div style="background:var(--gold-ghost);border:1px solid var(--gold-faint);border-radius:8px;padding:12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="color:var(--gold-bright);font-family:var(--font-mono);font-size:13px">${esc(d.decision)}</div>
+          <span style="font-family:var(--font-mono);font-size:10px;opacity:0.4">${d.date}</span>
+        </div>
+        ${d.rationale ? `<div style="font-size:12px;opacity:0.7;margin-top:4px">Because: ${esc(d.rationale)}</div>` : ''}
+        ${d.alternatives?.length ? `<div style="font-size:11px;opacity:0.5;margin-top:2px">Over: ${d.alternatives.map(a => esc(a)).join(', ')}</div>` : ''}
+        <div style="display:flex;gap:10px;margin-top:6px;font-family:var(--font-mono);font-size:10px;opacity:0.4">
+          ${d.reversibility ? `<span>${d.reversibility}</span>` : ''}
+          ${d.confidence ? `<span>${d.confidence} confidence</span>` : ''}
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  // Episodes timeline
+  if (episodes.length > 0) {
+    html += `<div class="savestate-section">
+      <div class="section-header"><span class="section-icon">📖</span>Episode Timeline</div>`;
+    for (const ep of episodes) {
+      const preview = ep.highlights?.substring(0, 120) || ep.momentum?.substring(0, 120) || ep.openThreads?.substring(0, 120) || '';
+      html += `<div class="timeline-card" onclick="goToDate('${ep.date}')" style="cursor:pointer">
+        <div class="timeline-card-header">
+          <span class="timeline-day">${formatDate(ep.date)}</span>
+          ${ep.hasSaveState ? '<span style="color:var(--gold);font-size:11px">⚡ save-state</span>' : ''}
+        </div>
+        ${preview ? `<div class="timeline-preview">${esc(preview.trim())}${preview.length >= 120 ? '...' : ''}</div>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+
+  el.innerHTML = html;
+}
+
+function drillIntoWorkstream(tag) {
+  selectedWorkstream = tag;
+  workstreamView = 'detail';
+  renderWorkstreams();
+}
+
+function backToWorkstreams() {
+  workstreamView = 'overview';
+  selectedWorkstream = '';
+  renderWorkstreams();
+}
+
+function goToDate(date) {
+  selectedDate = date;
+  currentView = 'journal';
+  render();
+}
+
 // ── BRIEFING GENERATORS ──
 function generateStructuredBriefing() {
   const lines = [];
@@ -1454,6 +1834,7 @@ function render() {
     case 'journal':   renderJournal(); break;
     case 'savestate': renderSaveState(); break;
     case 'timeline':  renderTimeline(); break;
+    case 'workstreams': renderWorkstreams(); break;
     case 'briefing':  renderBriefing(); break;
     case 'settings':  renderSettings(); break;
   }
@@ -1803,13 +2184,22 @@ function renderTimeline() {
 
 function renderBriefing() {
   const el = document.getElementById('view-briefing');
+  const allTags = getAllTags();
 
   let output = '';
   if (briefingMode === 'structured') output = generateStructuredBriefing();
   else if (briefingMode === 'hotresume') output = generateHotResume();
   else output = generateFullContext();
 
+  // If workstream filter is active, note it in the output header
+  const wsLabel = briefingWorkstream ? ` [workstream: #${briefingWorkstream}]` : '';
+
   el.innerHTML = `
+    ${allTags.length > 0 ? `<div style="margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="font-family:var(--font-mono);font-size:10px;opacity:0.4">SCOPE:</span>
+      <span class="tag-filter ${!briefingWorkstream ? 'active' : ''}" onclick="setBriefingWorkstream('')">All</span>
+      ${allTags.map(t => `<span class="tag-filter ${briefingWorkstream === t ? 'active' : ''}" onclick="setBriefingWorkstream('${esc(t)}')">#${esc(t)}</span>`).join('')}
+    </div>` : ''}
     <div class="briefing-modes">
       <button class="nav-btn ${briefingMode === 'structured' ? 'active' : ''}" onclick="setBriefingMode('structured')">Structured Briefing</button>
       <button class="nav-btn ${briefingMode === 'hotresume' ? 'active' : ''}" onclick="setBriefingMode('hotresume')">Hot Resume</button>
@@ -1818,8 +2208,13 @@ function renderBriefing() {
     <div class="briefing-output">${esc(output)}</div>
     <div class="briefing-actions">
       <button class="action-btn btn-copy" id="copy-briefing-btn" onclick="copyBriefing()">Copy to Clipboard</button>
-      <button class="action-btn btn-wake" id="wake-btn" onclick="wakeElle()">☀ Wake Elle</button>
+      <button class="action-btn btn-wake" id="wake-btn" onclick="wakeElle()">☀ Wake Elle${wsLabel}</button>
     </div>`;
+}
+
+function setBriefingWorkstream(ws) {
+  briefingWorkstream = ws;
+  renderBriefing();
 }
 
 function renderSettings() {
@@ -1883,11 +2278,13 @@ function renderSettings() {
       <div class="settings-stat">Backend: ${StorageAdapter._backend === 'artifact' ? 'Claude Artifact (window.storage)' : StorageAdapter._backend === 'indexeddb' ? 'IndexedDB' : 'localStorage'}</div>
       ${StorageAdapter._backend === 'indexeddb' ? `
         <div class="settings-stat">Persistent storage: ${StorageAdapter._persistent === true ? '✓ Granted' : StorageAdapter._persistent === false ? '⚠ Not granted — back up regularly' : '—'}</div>
+        <div class="settings-stat">Indexed stores: episodes + decisions (multiEntry tags)</div>
         ${localStorage.getItem('elle-idb-migrated') === 'true' ? `<div class="settings-stat">Migrated from localStorage: ${localStorage.getItem('elle-idb-migration-date') ? new Date(localStorage.getItem('elle-idb-migration-date')).toLocaleDateString() : '✓'}</div>` : ''}
+        <button class="action-btn btn-primary" onclick="rebuildIndexes()" style="font-size:11px;padding:5px 12px;margin-top:8px">Rebuild Indexes</button>
       ` : ''}
     </div>
     <div class="settings-about">
-      Elle's Journal v2.3 — Artificial Hippocampus<br>
+      Elle's Journal v2.4 — Artificial Hippocampus<br>
       Built by Elle & Ralph Martello, 2026<br>
       💛 Always.
     </div>`;
@@ -2216,6 +2613,11 @@ function removeEditTag(tag) {
 }
 
 // ── HIBERNATE PROMPT ──
+async function rebuildIndexes() {
+  await StorageAdapter.rebuildIndexedStores();
+  showModal('Indexes Rebuilt', 'Episodes and decisions stores have been rebuilt from source data.');
+}
+
 function saveExtensionId() {
   const input = document.getElementById('ext-id-input');
   const id = input.value.trim();
@@ -2300,6 +2702,15 @@ function confirmClearAll() {
     for (const k of jKeys) await StorageAdapter.delete(k);
     const sKeys = await StorageAdapter.listKeys('savestate:');
     for (const k of sKeys) await StorageAdapter.delete(k);
+    // Clear indexed stores
+    if (StorageAdapter._backend === 'indexeddb') {
+      try {
+        const tx = StorageAdapter._db.transaction(['episodes', 'decisions'], 'readwrite');
+        tx.objectStore('episodes').clear();
+        tx.objectStore('decisions').clear();
+        localStorage.removeItem('elle-indexed-populated');
+      } catch { /* silent */ }
+    }
     entries = {};
     saveStates = {};
     selectedDate = todayStr();

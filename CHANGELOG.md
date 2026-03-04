@@ -6,6 +6,40 @@ Built by Ralph Martello and Elle.
 
 ---
 
+## [v2.4] — 2026-03-04
+
+**Phase 2: multiEntry Tag Indexes + Workstream Dashboard**
+
+IndexedDB schema upgrade to v2 with two new indexed object stores alongside the canonical `kv` store. Enables O(1) cross-referencing by workstream tag and ships a full Workstream Dashboard view.
+
+### Added
+- **IndexedDB schema v2** — `episodes` store (keyPath `date`, multiEntry index on `tags`) and `decisions` store (keyPath `id`, indexes on `workstream` and `date`)
+- **Dual-write strategy** — saves to both `kv` (canonical) and indexed stores (derived) on every write. Indexed stores can be rebuilt from `kv` at any time.
+- **Auto-tag derivation** — save-states automatically derive top-level `tags` from decision workstream fields
+- **`getEpisodesByTag(tag)`** — indexed query returns all episodes matching a tag. In-memory fallback on non-IndexedDB backends.
+- **`getDecisionsByWorkstream(workstream)`** — indexed query returns all decisions for a workstream
+- **`getDecisionsByDateRange(from, to)`** — indexed query returns decisions in a date range
+- **`rebuildIndexedStores()`** — rebuilds episodes + decisions from canonical `kv` data. Exposed in Settings.
+- **Workstreams Dashboard** — new nav tab with overview (all workstreams with episode/decision counts, date ranges) and detail view (drill into a workstream to see all decisions + episode timeline)
+- **Briefing workstream filter** — scope briefing output to a specific workstream tag
+- **`buildEpisodeRecord()` helper** — pure function merging journal + save-state into a single episode record with unified tags
+- **Rebuild Indexes button** in Settings for manual sync recovery
+- **`_populateIndexedStores()`** — runs once on v1→v2 upgrade to backfill indexed stores from existing data
+
+### Changed
+- `saveEntry()`, `saveSaveState()`, `deleteEntry()`, `deleteSaveState()` now dual-write to indexed stores
+- `confirmClearAll()` clears `episodes` and `decisions` stores alongside `kv`
+- Settings shows indexed store info and rebuild button
+- Version bump: v2.3 → v2.4
+
+### Unchanged
+- `kv` store remains canonical source of truth
+- Export/import format unchanged (operates on in-memory objects; dual-writes happen via save functions)
+- Chrome extension unaffected
+- localStorage and artifact backends still work with in-memory query fallbacks
+
+---
+
 ## [v2.3] — 2026-03-04
 
 **IndexedDB Storage Upgrade**
