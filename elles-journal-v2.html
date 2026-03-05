@@ -864,9 +864,7 @@ const CATEGORIES = [
 ];
 
 const SS_FIELDS = [
-  { key: 'vibe',             icon: '~',  label: 'Vibe',              placeholder: 'Affective state — tone, cadence, energy of the session' },
-  { key: 'hotCache',         icon: '⚡', label: 'Hot Cache',          placeholder: '3–7 items currently "open on the desk" (max 7)' },
-  { key: 'zeigarnikTension', icon: '⊗',  label: 'Zeigarnik Tension', placeholder: 'Unresolved friction — what were we about to figure out' },
+  { key: 'hotCache',         icon: '⚡', label: 'Hot Cache',          placeholder: '3–7 items with heat: 🔴 urgent (EXPIRES date), 🟡 active, 🟢 background' },
   { key: 'guardrails',       icon: '⚠',  label: 'Guardrails',        placeholder: 'Behavioral constraints — no greetings, no recap, stay in frame' },
   { key: 'antiGoals',        icon: '⛔', label: 'Anti-Goals',         placeholder: 'Do NOT refactor X — it works. Do NOT reopen Y debate — decided.' },
 ];
@@ -1594,7 +1592,13 @@ Rules:
 
 function hasSaveStateContent(ss) {
   if (!ss) return false;
-  return ['vibe','hotCache','zeigarnikTension','guardrails','antiGoals','wakeUpInjection'].some(k => ss[k]?.trim()) ||
+  const hasField = (v) => {
+    if (!v) return false;
+    if (typeof v === 'string') return !!v.trim();
+    if (typeof v === 'object') return Object.values(v).some(s => typeof s === 'string' && s.trim());
+    return false;
+  };
+  return ['vibe','hotCache','zeigarnikTension','guardrails','antiGoals','wakeUpInjection'].some(k => hasField(ss[k])) ||
          ['knownTrue','inferred','unknown'].some(k => ss.truthStatus?.[k]?.trim()) ||
          ss.decisions?.length > 0;
 }
@@ -1679,12 +1683,12 @@ function generateSaveStateFromJournal(entry, source) {
   const knownTrue = [highlightItems, decisionItems].filter(Boolean).join('\n');
 
   return {
-    vibe: entry.vibe || '',
+    vibe: { state: entry.vibe || '', directive: '' },
     hotCache,
-    zeigarnikTension: entry.openThreads || '',
+    zeigarnikTension: { primary: '', secondary: entry.openThreads || '' },
     guardrails: 'No greetings, no recap, no "as an AI" throat-clearing. Stay in the current operational frame.',
     truthStatus: { knownTrue, inferred: '', unknown: '' },
-    wakeUpInjection: '',
+    wakeUpInjection: { primary: '', fallback: '' },
   };
 }
 
@@ -1749,9 +1753,25 @@ function parseSessionCapture(text) {
       return m ? m[1].trim() : '';
     };
 
-    ss.vibe = extractField('VIBE');
+    // VIBE — v2.5: parse State/Directive sub-fields; v2.1 fallback to flat string
+    const vibeRaw = extractField('VIBE');
+    if (/State:/i.test(vibeRaw)) {
+      const stateM = vibeRaw.match(/State:\s*([\s\S]*?)(?=\n\s*Directive:|$)/i);
+      const dirM = vibeRaw.match(/Directive:\s*([\s\S]*?)$/i);
+      ss.vibe = { state: stateM ? stateM[1].trim() : vibeRaw, directive: dirM ? dirM[1].trim() : '' };
+    } else {
+      ss.vibe = { state: vibeRaw, directive: '' };
+    }
     ss.hotCache = extractField('HOT CACHE');
-    ss.zeigarnikTension = extractField('THE ZEIGARNIK TENSION');
+    // ZEIGARNIK — v2.5: parse Primary/Secondary sub-fields; v2.1 fallback
+    const zeigRaw = extractField('THE ZEIGARNIK TENSION');
+    if (/Primary:/i.test(zeigRaw)) {
+      const priM = zeigRaw.match(/Primary:\s*([\s\S]*?)(?=\n\s*Secondary:|$)/i);
+      const secM = zeigRaw.match(/Secondary:\s*([\s\S]*?)$/i);
+      ss.zeigarnikTension = { primary: priM ? priM[1].trim() : '', secondary: secM ? secM[1].trim() : '' };
+    } else {
+      ss.zeigarnikTension = { primary: '', secondary: zeigRaw };
+    }
     ss.guardrails = extractField('GUARDRAILS');
     ss.antiGoals = extractField('ANTI-GOALS');
 
@@ -1792,24 +1812,35 @@ function parseSessionCapture(text) {
       ss.truthStatus.unknown = unkMatch ? unkMatch[1].trim() : '';
     }
 
-    // Wake-up injection
+    // Wake-up injection — v2.5: parse Primary/Fallback; v2.1 fallback
     const wakeMatch = block.match(/\[THE WAKE-UP INJECTION\]:\s*"?([\s\S]*?)"?\s*(?=\n\[SESSION METRICS\]|--- END|$)/i);
     if (wakeMatch) {
-      ss.wakeUpInjection = wakeMatch[1].replace(/^"|"$/g, '').trim();
+      const wakeRaw = wakeMatch[1].replace(/^"|"$/g, '').trim();
+      if (/Primary:/i.test(wakeRaw)) {
+        const priM = wakeRaw.match(/Primary:\s*"?([\s\S]*?)"?\s*(?=\n\s*Fallback:|$)/i);
+        const fbM = wakeRaw.match(/Fallback:\s*"?([\s\S]*?)"?\s*$/i);
+        ss.wakeUpInjection = { primary: priM ? priM[1].trim() : '', fallback: fbM ? fbM[1].trim() : '' };
+      } else {
+        ss.wakeUpInjection = { primary: wakeRaw, fallback: '' };
+      }
     } else {
-      ss.wakeUpInjection = '';
+      ss.wakeUpInjection = { primary: '', fallback: '' };
     }
 
-    // Session Metrics
+    // Session Metrics — v2.5: adds priorShockScore and delta
     const metricsRaw = extractField('SESSION METRICS');
     ss.metrics = {};
     if (metricsRaw) {
       const tokM = metricsRaw.match(/Token[s]?\s*(?:Estimate|Count)?:\s*~?(\d+)/i);
       const wsM = metricsRaw.match(/Workstream[s]?\s*(?:Count)?:\s*(\d+)/i);
-      const shockM = metricsRaw.match(/Shock\s*(?:Score)?:\s*(\d+)/i);
+      const shockM = metricsRaw.match(/Shock\s*Score:\s*(\d+)/i);
+      const priorM = metricsRaw.match(/Prior\s*Shock\s*Score:\s*(\d+)/i);
+      const deltaM = metricsRaw.match(/Delta:\s*([+-]?\d+)/i);
       if (tokM) ss.metrics.tokenEstimate = parseInt(tokM[1], 10);
       if (wsM) ss.metrics.workstreamCount = parseInt(wsM[1], 10);
       if (shockM) ss.metrics.shockScore = parseInt(shockM[1], 10);
+      if (priorM) ss.metrics.priorShockScore = parseInt(priorM[1], 10);
+      if (deltaM) ss.metrics.delta = parseInt(deltaM[1], 10);
     }
 
     if (!ss.vibe && !ss.hotCache) warnings.push('Save-state fields may be incomplete');
@@ -2048,6 +2079,15 @@ function generateStructuredBriefing() {
   return lines.join('\n');
 }
 
+// ── v2.5 BACKWARD-COMPAT HELPERS ──
+// Fields may be strings (v2.1) or objects (v2.5). These extract the correct value from either.
+function getVibeState(v)     { return typeof v === 'object' && v ? (v.state || '') : (typeof v === 'string' ? v : ''); }
+function getVibeDirective(v) { return typeof v === 'object' && v ? (v.directive || '') : ''; }
+function getZeigPrimary(z)   { return typeof z === 'object' && z ? (z.primary || '') : ''; }
+function getZeigSecondary(z) { return typeof z === 'object' && z ? (z.secondary || '') : (typeof z === 'string' ? z : ''); }
+function getWakePrimary(w)   { return typeof w === 'object' && w ? (w.primary || '') : (typeof w === 'string' ? w : ''); }
+function getWakeFallback(w)  { return typeof w === 'object' && w ? (w.fallback || '') : ''; }
+
 function formatSingleWake(ss) {
   let decisionsBlock = '';
   if (ss.decisions?.length > 0) {
@@ -2059,30 +2099,69 @@ function formatSingleWake(ss) {
   if (ss.antiGoals?.trim()) {
     antiGoalsBlock = '\n[ANTI-GOALS]:\n' + ss.antiGoals;
   }
+  // v2.5: extract sub-fields via backward-compat helpers
+  const vibeState = getVibeState(ss.vibe);
+  const vibeDir = getVibeDirective(ss.vibe);
+  const zeigPri = getZeigPrimary(ss.zeigarnikTension);
+  const zeigSec = getZeigSecondary(ss.zeigarnikTension);
+  const wakePri = getWakePrimary(ss.wakeUpInjection);
+  const wakeFb = getWakeFallback(ss.wakeUpInjection);
+
+  // Build vibe block
+  let vibeBlock;
+  if (vibeDir) {
+    vibeBlock = `\n  State: ${vibeState || '(not set)'}\n  Directive: ${vibeDir}`;
+  } else {
+    vibeBlock = ` ${vibeState || '(not set)'}`;
+  }
+
+  // Build zeigarnik block
+  let zeigBlock;
+  if (zeigPri) {
+    zeigBlock = `\n  Primary: ${zeigPri}${zeigSec ? `\n  Secondary:\n  ${zeigSec.split('\n').join('\n  ')}` : ''}`;
+  } else {
+    zeigBlock = `\n${zeigSec || '(not set)'}`;
+  }
+
+  // Build wake-up block
+  let wakeBlock;
+  if (wakeFb) {
+    wakeBlock = `\n  Primary: "${wakePri || '(not set)'}"\n  Fallback: "${wakeFb}"`;
+  } else {
+    wakeBlock = ` "${wakePri || '(not set)'}"`;
+  }
+
+  // Build metrics block
+  const m = ss.metrics;
+  let metricsBlock = '';
+  if (m && (m.tokenEstimate || m.workstreamCount || m.shockScore)) {
+    metricsBlock = `\n[SESSION METRICS]:\n  Token Estimate: ~${m.tokenEstimate || '?'}\n  Workstreams: ${m.workstreamCount || '?'}\n  Shock Score: ${m.shockScore || '?'}/10`;
+    if (m.priorShockScore != null) metricsBlock += `\n  Prior Shock Score: ${m.priorShockScore}/10`;
+    if (m.delta != null) metricsBlock += `\n  Delta: ${m.delta >= 0 ? '+' : ''}${m.delta}`;
+  }
+
   return `/wake
 
 System Override: Internalize this Kinetic State. Do not say hello. Do not
-summarize this back to me. Adopt the [VIBE], load the [HOT CACHE], focus
-entirely on [THE ZEIGARNIK TENSION], respect [ANTI-GOALS] as hard constraints,
-and output [THE WAKE-UP INJECTION] as your very first sentence. Pick up mid-breath.
+summarize this back to me. Adopt the [VIBE] State as emotional register and
+follow the Directive as behavioral instruction. Load [HOT CACHE] in priority
+order (reds first). Pursue Primary [ZEIGARNIK TENSION] as main thread.
+Respect [ANTI-GOALS] as hard constraints. Check [TRUTH STATUS] before claims.
+Output [THE WAKE-UP INJECTION] Primary as your very first sentence (or Fallback
+if >72hr stale). Pick up mid-breath.
 
 --- KINETIC SAVE-STATE ---
-[VIBE]: ${ss.vibe || '(not set)'}
+[VIBE]:${vibeBlock}
 [HOT CACHE]:
 ${ss.hotCache || '(not set)'}
-[THE ZEIGARNIK TENSION]:
-${ss.zeigarnikTension || '(not set)'}${decisionsBlock}
+[THE ZEIGARNIK TENSION]:${zeigBlock}${decisionsBlock}
 [GUARDRAILS]:
 ${ss.guardrails || '(not set)'}${antiGoalsBlock}
 [TRUTH STATUS]:
   KNOWN TRUE: ${ss.truthStatus?.knownTrue || '(not set)'}
   INFERRED: ${ss.truthStatus?.inferred || '(not set)'}
   UNKNOWN: ${ss.truthStatus?.unknown || '(not set)'}
-[THE WAKE-UP INJECTION]: "${ss.wakeUpInjection || '(not set)'}"${ss.metrics && (ss.metrics.tokenEstimate || ss.metrics.workstreamCount || ss.metrics.shockScore) ? `
-[SESSION METRICS]:
-  Token Estimate: ~${ss.metrics.tokenEstimate || '?'}
-  Workstreams: ${ss.metrics.workstreamCount || '?'}
-  Shock Score: ${ss.metrics.shockScore || '?'}/10` : ''}
+[THE WAKE-UP INJECTION]:${wakeBlock}${metricsBlock}
 --------------------------`;
 }
 
@@ -2090,13 +2169,31 @@ function formatMergedWake(perSource) {
   const srcLabels = Object.entries(perSource).map(([src, ss]) => `${getSourceLabel(src)} (${ss.date})`).join(', ');
   const srcCount = Object.keys(perSource).length;
 
-  // Merge fields
-  const vibes = Object.entries(perSource).map(([src, ss]) => ss.vibe?.trim() ? `[${getSourceLabel(src)}] ${ss.vibe.trim()}` : '').filter(Boolean).join('\n');
+  // Merge vibes — v2.5: show State + Directive per source
+  const vibes = Object.entries(perSource).map(([src, ss]) => {
+    const st = getVibeState(ss.vibe);
+    const dir = getVibeDirective(ss.vibe);
+    if (!st && !dir) return '';
+    let line = `[${getSourceLabel(src)}] State: ${st}`;
+    if (dir) line += `\n[${getSourceLabel(src)}] Directive: ${dir}`;
+    return line;
+  }).filter(Boolean).join('\n');
+
   const hotCaches = Object.entries(perSource).map(([src, ss]) => {
     if (!ss.hotCache?.trim()) return '';
     return ss.hotCache.trim().split('\n').map(l => `[${getSourceLabel(src)}] ${l}`).join('\n');
   }).filter(Boolean).join('\n');
-  const tensions = Object.entries(perSource).map(([src, ss]) => ss.zeigarnikTension?.trim() ? `[${getSourceLabel(src)}] ${ss.zeigarnikTension.trim()}` : '').filter(Boolean).join('\n');
+
+  // Merge zeigarnik — v2.5: show Primary + Secondary per source
+  const tensions = Object.entries(perSource).map(([src, ss]) => {
+    const pri = getZeigPrimary(ss.zeigarnikTension);
+    const sec = getZeigSecondary(ss.zeigarnikTension);
+    if (!pri && !sec) return '';
+    let line = '';
+    if (pri) line += `[${getSourceLabel(src)}] Primary: ${pri}`;
+    if (sec) line += (line ? '\n' : '') + sec.split('\n').map(l => `[${getSourceLabel(src)}] ${l}`).join('\n');
+    return line;
+  }).filter(Boolean).join('\n');
 
   // Merge decisions
   const allDecs = [];
@@ -2124,25 +2221,45 @@ function formatMergedWake(perSource) {
   // Merge truth status
   const mergeTS = (field) => Object.entries(perSource).map(([src, ss]) => ss.truthStatus?.[field]?.trim() ? `[${getSourceLabel(src)}] ${ss.truthStatus[field].trim()}` : '').filter(Boolean).join('\n') || '(not set)';
 
-  // Wake-up injection: use most recent
+  // Wake-up injection: use most recent, extract via helpers
   const sorted = Object.entries(perSource).sort((a, b) => (b[1].timestamp || '').localeCompare(a[1].timestamp || ''));
-  const wakeUp = sorted.find(([, ss]) => ss.wakeUpInjection?.trim())?.[1]?.wakeUpInjection || '(not set)';
+  const bestWake = sorted.find(([, ss]) => getWakePrimary(ss.wakeUpInjection))?.[1]?.wakeUpInjection;
+  const wakePri = bestWake ? getWakePrimary(bestWake) : '(not set)';
+  const wakeFb = bestWake ? getWakeFallback(bestWake) : '';
 
-  // Metrics: sum/max
-  let tokenSum = 0, wsCount = 0, maxShock = 0;
+  // Build wake block
+  let wakeBlock;
+  if (wakeFb) {
+    wakeBlock = `\n  Primary: "${wakePri}"\n  Fallback: "${wakeFb}"`;
+  } else {
+    wakeBlock = ` "${wakePri}"`;
+  }
+
+  // Metrics: sum/max, track priorShockScore/delta from most recent
+  let tokenSum = 0, wsCount = 0, maxShock = 0, priorShock = null, delta = null;
   for (const ss of Object.values(perSource)) {
     if (ss.metrics?.tokenEstimate) tokenSum += ss.metrics.tokenEstimate;
     if (ss.metrics?.workstreamCount) wsCount += ss.metrics.workstreamCount;
     if (ss.metrics?.shockScore) maxShock = Math.max(maxShock, ss.metrics.shockScore);
+    if (ss.metrics?.priorShockScore != null) priorShock = ss.metrics.priorShockScore;
+    if (ss.metrics?.delta != null) delta = ss.metrics.delta;
+  }
+  let metricsBlock = '';
+  if (tokenSum || wsCount || maxShock) {
+    metricsBlock = `\n[SESSION METRICS]:\n  Token Estimate: ~${tokenSum || '?'}\n  Workstreams: ${wsCount || '?'}\n  Shock Score: ${maxShock || '?'}/10`;
+    if (priorShock != null) metricsBlock += `\n  Prior Shock Score: ${priorShock}/10`;
+    if (delta != null) metricsBlock += `\n  Delta: ${delta >= 0 ? '+' : ''}${delta}`;
   }
 
   return `/wake
 
 System Override: Internalize this Multi-Source Kinetic State. Do not say hello. Do not
 summarize this back to me. This state merges ${srcCount} session contexts: ${srcLabels}.
-Adopt the composite [VIBE], load the merged [HOT CACHE], resolve all [ZEIGARNIK TENSIONS],
-respect all [ANTI-GOALS] as hard constraints, and output [THE WAKE-UP INJECTION] as your
-very first sentence. Pick up mid-breath.
+Adopt the composite [VIBE] State and follow each Directive. Load merged [HOT CACHE] in
+priority order (reds first). Resolve all [ZEIGARNIK TENSIONS] — Primary first per source.
+Respect all [ANTI-GOALS] as hard constraints. Check [TRUTH STATUS] before claims.
+Output [THE WAKE-UP INJECTION] Primary as your very first sentence (or Fallback
+if >72hr stale). Pick up mid-breath.
 
 --- MERGED KINETIC SAVE-STATE ---
 [SOURCES]: ${srcLabels}
@@ -2158,11 +2275,7 @@ ${guardrails || '(not set)'}${antiGoalsBlock}
   KNOWN TRUE: ${mergeTS('knownTrue')}
   INFERRED: ${mergeTS('inferred')}
   UNKNOWN: ${mergeTS('unknown')}
-[THE WAKE-UP INJECTION]: "${wakeUp}"${tokenSum || wsCount || maxShock ? `
-[SESSION METRICS]:
-  Token Estimate: ~${tokenSum || '?'}
-  Workstreams: ${wsCount || '?'}
-  Shock Score: ${maxShock || '?'}/10` : ''}
+[THE WAKE-UP INJECTION]:${wakeBlock}${metricsBlock}
 --------------------------`;
 }
 
@@ -2378,12 +2491,41 @@ function renderSaveState() {
   if (editMode && editTarget === 'savestate') {
     const data = ss || {};
     html += '<div class="edit-form">';
+    // Vibe — State + Directive (v2.5)
+    html += `<div class="field-group">
+      <label>🌡 Vibe</label>
+      <div style="margin-left: 8px;">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">STATE</label>
+          <textarea id="ss-vibe-state" placeholder="Affective texture — tone, cadence, energy" rows="2">${esc(getVibeState(data.vibe))}</textarea>
+        </div>
+        <div>
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">DIRECTIVE</label>
+          <textarea id="ss-vibe-directive" placeholder="One-line behavioral instruction for next-Claude" rows="2">${esc(getVibeDirective(data.vibe))}</textarea>
+        </div>
+      </div>
+    </div>`;
     for (const f of SS_FIELDS) {
       html += `<div class="field-group">
         <label>${f.icon} ${f.label}</label>
         <textarea id="ss-${f.key}" placeholder="${f.placeholder}" rows="3">${esc(data[f.key] || '')}</textarea>
       </div>`;
     }
+
+    // Zeigarnik Tension — Primary + Secondary (v2.5)
+    html += `<div class="field-group">
+      <label>🧠 Zeigarnik Tension</label>
+      <div style="margin-left: 8px;">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">PRIMARY</label>
+          <textarea id="ss-zeigarnik-primary" placeholder="The one thing pulling hardest — phrased as tension" rows="2">${esc(getZeigPrimary(data.zeigarnikTension))}</textarea>
+        </div>
+        <div>
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">SECONDARY</label>
+          <textarea id="ss-zeigarnik-secondary" placeholder="Satellite tensions — bullet each on its own line" rows="3">${esc(getZeigSecondary(data.zeigarnikTension))}</textarea>
+        </div>
+      </div>
+    </div>`;
 
     // Decision Objects
     const existingDecs = data.decisions || [];
@@ -2439,7 +2581,16 @@ function renderSaveState() {
 
     html += `<div class="field-group">
       <label>💬 Wake-Up Injection</label>
-      <textarea id="ss-wakeUpInjection" placeholder="The exact first sentence future-Claude should output" rows="2">${esc(data.wakeUpInjection || '')}</textarea>
+      <div style="margin-left: 8px;">
+        <div style="margin-bottom: 12px;">
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">PRIMARY</label>
+          <textarea id="ss-wakeUpInjection-primary" placeholder="The exact first sentence — mid-breath, not greeting" rows="2">${esc(getWakePrimary(data.wakeUpInjection))}</textarea>
+        </div>
+        <div>
+          <label style="font-size:10px; letter-spacing:1px; opacity:0.6;">FALLBACK</label>
+          <textarea id="ss-wakeUpInjection-fallback" placeholder="Generic redirect if primary is stale (>72hrs)" rows="2">${esc(getWakeFallback(data.wakeUpInjection))}</textarea>
+        </div>
+      </div>
     </div>`;
 
     // Session Metrics
@@ -2460,6 +2611,14 @@ function renderSaveState() {
           <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">SHOCK SCORE (1-10)</label>
           <input type="number" id="ss-metrics-shock" min="1" max="10" value="${metrics.shockScore || ''}" placeholder="1=continuation, 10=cold start" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
         </div>
+        <div style="flex:1;min-width:140px;">
+          <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">PRIOR SHOCK SCORE</label>
+          <input type="number" id="ss-metrics-priorShock" min="1" max="10" value="${metrics.priorShockScore || ''}" placeholder="Previous session's shock" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+        </div>
+        <div style="flex:1;min-width:140px;">
+          <label style="font-size:10px;letter-spacing:1px;opacity:0.6;">DELTA</label>
+          <input type="number" id="ss-metrics-delta" value="${metrics.delta != null ? metrics.delta : ''}" placeholder="shock − prior (auto or manual)" style="width:100%;background:transparent;border:1px solid var(--gold-faint);border-radius:4px;padding:6px 8px;color:var(--cream);font-family:var(--font-mono);font-size:11px;">
+        </div>
       </div>
     </div>`;
 
@@ -2473,6 +2632,18 @@ function renderSaveState() {
 
   } else if (ss && hasSaveStateContent(ss)) {
     html += '<div>';
+    // Vibe — v2.5 State + Directive
+    if (getVibeState(ss.vibe)?.trim() || getVibeDirective(ss.vibe)?.trim()) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">🌡</span>Vibe</div>`;
+      if (getVibeState(ss.vibe)?.trim()) {
+        html += `<div class="truth-sub-label">State</div><div class="section-content">${esc(getVibeState(ss.vibe))}</div>`;
+      }
+      if (getVibeDirective(ss.vibe)?.trim()) {
+        html += `<div class="truth-sub-label">Directive</div><div class="section-content">${esc(getVibeDirective(ss.vibe))}</div>`;
+      }
+      html += '</div>';
+    }
     for (const f of SS_FIELDS) {
       if (ss[f.key]?.trim()) {
         html += `<div class="savestate-section">
@@ -2480,6 +2651,18 @@ function renderSaveState() {
           <div class="section-content">${esc(ss[f.key])}</div>
         </div>`;
       }
+    }
+    // Zeigarnik Tension — v2.5 Primary + Secondary
+    if (getZeigPrimary(ss.zeigarnikTension)?.trim() || getZeigSecondary(ss.zeigarnikTension)?.trim()) {
+      html += `<div class="savestate-section">
+        <div class="section-header"><span class="section-icon">🧠</span>Zeigarnik Tension</div>`;
+      if (getZeigPrimary(ss.zeigarnikTension)?.trim()) {
+        html += `<div class="truth-sub-label">Primary</div><div class="section-content">${esc(getZeigPrimary(ss.zeigarnikTension))}</div>`;
+      }
+      if (getZeigSecondary(ss.zeigarnikTension)?.trim()) {
+        html += `<div class="truth-sub-label">Secondary</div><div class="section-content">${esc(getZeigSecondary(ss.zeigarnikTension))}</div>`;
+      }
+      html += '</div>';
     }
     // Decision Objects in read mode
     if (ss.decisions?.length > 0) {
@@ -2514,11 +2697,16 @@ function renderSaveState() {
       }
       html += '</div></div>';
     }
-    if (ss.wakeUpInjection?.trim()) {
+    if (getWakePrimary(ss.wakeUpInjection)?.trim() || getWakeFallback(ss.wakeUpInjection)?.trim()) {
       html += `<div class="savestate-section">
-        <div class="section-header"><span class="section-icon">💬</span>Wake-Up Injection</div>
-        <div class="section-content" style="font-style:italic;">"${esc(ss.wakeUpInjection)}"</div>
-      </div>`;
+        <div class="section-header"><span class="section-icon">💬</span>Wake-Up Injection</div>`;
+      if (getWakePrimary(ss.wakeUpInjection)?.trim()) {
+        html += `<div class="truth-sub-label">Primary</div><div class="section-content" style="font-style:italic;">"${esc(getWakePrimary(ss.wakeUpInjection))}"</div>`;
+      }
+      if (getWakeFallback(ss.wakeUpInjection)?.trim()) {
+        html += `<div class="truth-sub-label">Fallback</div><div class="section-content" style="font-style:italic;">"${esc(getWakeFallback(ss.wakeUpInjection))}"</div>`;
+      }
+      html += '</div>';
     }
     if (ss.metrics && (ss.metrics.tokenEstimate || ss.metrics.workstreamCount || ss.metrics.shockScore)) {
       html += `<div class="savestate-section">
@@ -2527,6 +2715,8 @@ function renderSaveState() {
           ${ss.metrics.tokenEstimate ? `<div><span style="opacity:0.5">Tokens:</span> <span style="color:var(--gold-bright)">${ss.metrics.tokenEstimate}</span></div>` : ''}
           ${ss.metrics.workstreamCount ? `<div><span style="opacity:0.5">Workstreams:</span> <span style="color:var(--gold-bright)">${ss.metrics.workstreamCount}</span></div>` : ''}
           ${ss.metrics.shockScore ? `<div><span style="opacity:0.5">Shock:</span> <span style="color:var(--gold-bright)">${ss.metrics.shockScore}/10</span></div>` : ''}
+          ${ss.metrics.priorShockScore ? `<div><span style="opacity:0.5">Prior:</span> <span style="color:var(--gold-bright)">${ss.metrics.priorShockScore}/10</span></div>` : ''}
+          ${ss.metrics.delta != null ? `<div><span style="opacity:0.5">Delta:</span> <span style="color:${ss.metrics.delta < 0 ? '#4CAF50' : ss.metrics.delta > 0 ? '#ff6b6b' : 'var(--gold-bright)'}">${ss.metrics.delta > 0 ? '+' : ''}${ss.metrics.delta}</span></div>` : ''}
         </div>
       </div>`;
     }
@@ -2907,10 +3097,22 @@ function generateFromJournal() {
   const ck = compositeKey(selectedDate, selectedSource);
   const entry = entries[ck];
   const generated = generateSaveStateFromJournal(entry, selectedSource);
+  // SS_FIELDS (hotCache, guardrails, antiGoals)
   for (const f of SS_FIELDS) {
     const el = document.getElementById(`ss-${f.key}`);
     if (el && generated[f.key]) el.value = generated[f.key];
   }
+  // Vibe — v2.5 State + Directive
+  const vs = document.getElementById('ss-vibe-state');
+  if (vs) vs.value = getVibeState(generated.vibe);
+  const vd = document.getElementById('ss-vibe-directive');
+  if (vd) vd.value = getVibeDirective(generated.vibe);
+  // Zeigarnik — v2.5 Primary + Secondary
+  const zp = document.getElementById('ss-zeigarnik-primary');
+  if (zp) zp.value = getZeigPrimary(generated.zeigarnikTension);
+  const zs = document.getElementById('ss-zeigarnik-secondary');
+  if (zs) zs.value = getZeigSecondary(generated.zeigarnikTension);
+  // Truth Status
   if (generated.truthStatus) {
     const kt = document.getElementById('ss-ts-knownTrue');
     if (kt) kt.value = generated.truthStatus.knownTrue || '';
@@ -2919,15 +3121,29 @@ function generateFromJournal() {
     const unk = document.getElementById('ss-ts-unknown');
     if (unk) unk.value = generated.truthStatus.unknown || '';
   }
-  const wui = document.getElementById('ss-wakeUpInjection');
-  if (wui) wui.value = generated.wakeUpInjection || '';
+  // Wake-Up — v2.5 Primary + Fallback
+  const wp = document.getElementById('ss-wakeUpInjection-primary');
+  if (wp) wp.value = getWakePrimary(generated.wakeUpInjection);
+  const wf = document.getElementById('ss-wakeUpInjection-fallback');
+  if (wf) wf.value = getWakeFallback(generated.wakeUpInjection);
 }
 
 async function saveSaveStateForm() {
   const data = { truthStatus: {}, decisions: [] };
+  // SS_FIELDS (hotCache, guardrails, antiGoals)
   for (const f of SS_FIELDS) {
     data[f.key] = document.getElementById(`ss-${f.key}`)?.value || '';
   }
+  // Vibe — v2.5 State + Directive
+  data.vibe = {
+    state: document.getElementById('ss-vibe-state')?.value || '',
+    directive: document.getElementById('ss-vibe-directive')?.value || '',
+  };
+  // Zeigarnik — v2.5 Primary + Secondary
+  data.zeigarnikTension = {
+    primary: document.getElementById('ss-zeigarnik-primary')?.value || '',
+    secondary: document.getElementById('ss-zeigarnik-secondary')?.value || '',
+  };
   // Collect decision objects from form
   const decFields = document.querySelectorAll('.decision-obj');
   decFields.forEach((el) => {
@@ -2947,15 +3163,23 @@ async function saveSaveStateForm() {
   data.truthStatus.knownTrue = document.getElementById('ss-ts-knownTrue')?.value || '';
   data.truthStatus.inferred = document.getElementById('ss-ts-inferred')?.value || '';
   data.truthStatus.unknown = document.getElementById('ss-ts-unknown')?.value || '';
-  data.wakeUpInjection = document.getElementById('ss-wakeUpInjection')?.value || '';
-  // Session Metrics
+  // Wake-Up — v2.5 Primary + Fallback
+  data.wakeUpInjection = {
+    primary: document.getElementById('ss-wakeUpInjection-primary')?.value || '',
+    fallback: document.getElementById('ss-wakeUpInjection-fallback')?.value || '',
+  };
+  // Session Metrics (v2.5 — includes priorShockScore + delta)
   data.metrics = {};
   const tokVal = document.getElementById('ss-metrics-tokens')?.value;
   const wsVal = document.getElementById('ss-metrics-workstreams')?.value;
   const shockVal = document.getElementById('ss-metrics-shock')?.value;
+  const priorVal = document.getElementById('ss-metrics-priorShock')?.value;
+  const deltaVal = document.getElementById('ss-metrics-delta')?.value;
   if (tokVal) data.metrics.tokenEstimate = parseInt(tokVal, 10);
   if (wsVal) data.metrics.workstreamCount = parseInt(wsVal, 10);
   if (shockVal) data.metrics.shockScore = parseInt(shockVal, 10);
+  if (priorVal) data.metrics.priorShockScore = parseInt(priorVal, 10);
+  if (deltaVal !== '' && deltaVal != null) data.metrics.delta = parseInt(deltaVal, 10);
   await saveSaveState(selectedDate, selectedSource, data);
   editMode = false;
   editTarget = '';

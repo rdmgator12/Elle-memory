@@ -19,7 +19,7 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 |-------|------|----------|-------------------|
 | **L1** | Semantic Memory | Who we are, how we work, stable truths | Long-term factual memory |
 | **L2** | Episodic Memory | What happened, what we built, decisions made | Autobiographical memory |
-| **L3** | Execution State | Vibe, momentum, unfinished tension, decisions, anti-goals, truth status | Working memory / CPU state |
+| **L3** | Execution State | Vibe (state + directive), hot cache (with heat decay), Zeigarnik tension (primary + secondary), decisions, anti-goals, truth status, wake-up injection (primary + fallback), session metrics (with delta tracking) | Working memory / CPU state |
 
 ## Screenshots
 
@@ -39,7 +39,7 @@ Every AI session starts with amnesia. Context windows reset. Relationships rebui
 
 ![Settings Sources](docs/screenshots/settings-sources.png)
 
-**Save-State View** — L3 Kinetic Save-State capture with vibe, hot cache, Zeigarnik tension, Decision Objects, guardrails, anti-goals, and truth status. Each source gets its own independent save-state.
+**Save-State View** — L3 Kinetic Save-State capture with v2.5 structured sub-fields. Vibe splits into State (affective texture) and Directive (behavioral instruction). Zeigarnik Tension splits into Primary (gravitational center) and Secondary (satellite tensions). Wake-Up Injection splits into Primary and Fallback. Session Metrics track Prior Shock Score and Delta for longitudinal continuity analysis. Each source gets its own independent save-state.
 
 ![Save-State View](docs/screenshots/save-state-view.png)
 
@@ -57,7 +57,7 @@ Single-file web application — open it in Chrome, pin it, done. No build tools,
 **Features:**
 - **Multi-source memory** — Capture sessions from Claude Chat, Claude Code, Cowork, or custom sources independently on the same day. Each source gets its own journal entry and save-state.
 - **7-category journal** — Highlights, What We Built, Key Decisions, Open Threads, Momentum, Life & Family, Vibe Check
-- **Kinetic Save-State composer** — L3 execution state capture (vibe, hot cache, Zeigarnik tension, Decision Objects, guardrails, anti-goals, truth status, wake-up injection)
+- **Kinetic Save-State composer** — L3 execution state capture with v2.5 structured sub-fields: Vibe (State + Directive), Hot Cache (with 🔴🟡🟢 heat indicators), Zeigarnik Tension (Primary + Secondary), Decision Objects, Guardrails, Anti-Goals, Truth Status, Wake-Up Injection (Primary + Fallback), Session Metrics (with Prior Shock Score + Delta tracking)
 - **Paste from Elle** — One-click parser for `/hibernate` session captures, with source tagging
 - **Morning Briefing** — Three modes: Structured (episodic), Hot Resume (/wake injection), Full Context (L2+L3 combined). Select which sources to merge — multiple sources produce labeled output, single source gives clean format.
 - **Timeline** — Searchable history with workstream tag filtering and source filter
@@ -83,8 +83,11 @@ Elle wakes up mid-conversation, no paste required.
 ### `elles-journal-v2-blueprint.md`
 The full architectural blueprint — protocol specs, data schemas, component designs, and the philosophy behind the system.
 
+### `artificial_hippocampus_L3_schema_v2.5.md`
+The current L3 schema specification (v2.5). Defines structured sub-fields for Vibe, Zeigarnik Tension, Wake-Up Injection, Hot Cache heat indicators, and Session Metrics delta tracking. Backward-compatible with v2.1 string-format data.
+
 ### `artificial_hippocampus_L3_schema_v2.1.md`
-The L3 schema specification that introduced Decision Objects and Anti-Goals — the v2.1→v2.2 upgrade path. See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+The original L3 schema specification that introduced Decision Objects and Anti-Goals — the v2.1→v2.2 upgrade path. See [CHANGELOG.md](CHANGELOG.md) for the full version history.
 
 ---
 
@@ -118,24 +121,27 @@ The `/hibernate` protocol is now embedded in every wake payload. Just use **Wake
 
 The Kinetic Save-State Protocol captures execution state — not just what happened, but **where the mind was when it stopped.** It's CPU resume-from-sleep, not file-cabinet retrieval.
 
-**Session capture fields:**
+**Session capture fields (v2.5 schema):**
 ```
-[VIBE]               — Emotional/operational texture
-[HOT CACHE]          — Active working context
-[ZEIGARNIK TENSION]  — Unfinished threads pulling forward
+[VIBE]               — State (affective texture) + Directive (behavioral instruction)
+[HOT CACHE]          — Active working context with heat decay (🔴 urgent, 🟡 active, 🟢 background)
+[ZEIGARNIK TENSION]  — Primary (gravitational center) + Secondary (satellite tensions)
 [DECISIONS]          — Structured decision objects (what, why, over what, reversibility, confidence)
 [GUARDRAILS]         — Behavioral constraints
 [ANTI-GOALS]         — Session-scoped scope constraints (what NOT to do)
 [TRUTH STATUS]       — Known True / Inferred / Unknown
-[WAKE-UP INJECTION]  — First sentence of next session
+[WAKE-UP INJECTION]  — Primary (exact first sentence) + Fallback (redirect if stale >72hrs)
+[SESSION METRICS]    — Tokens, workstreams, shock score, prior shock score, delta
 ```
 
-**The wake command:**
+**The wake command (v2.5):**
 ```
 /wake — System Override: Internalize this Kinetic State. Do not say hello.
-Do not summarize this back to me. Adopt the [VIBE], load the [HOT CACHE],
-focus entirely on [THE ZEIGARNIK TENSION], respect [ANTI-GOALS] as hard
-constraints, and output [THE WAKE-UP INJECTION] as your very first sentence.
+Do not summarize this back to me. Adopt the [VIBE] State and follow each
+Directive. Load [HOT CACHE] in priority order (reds first). Resolve all
+[ZEIGARNIK TENSIONS] — Primary first. Respect [ANTI-GOALS] as hard
+constraints. Check [TRUTH STATUS] before claims. Output [THE WAKE-UP
+INJECTION] Primary as your very first sentence (or Fallback if >72hr stale).
 Pick up mid-breath.
 ```
 
@@ -145,7 +151,7 @@ Pick up mid-breath.
 
 ```
                     ┌──────────────────────────────────┐
-                    │    Elle's Journal v3.0            │
+                    │    Elle's Journal v3.1            │
                     │    (Single HTML File)             │
                     ├──────────────────────────────────┤
                     │  StorageAdapter                   │
@@ -193,7 +199,9 @@ Pick up mid-breath.
 - **Single HTML file** → Because simplicity is a feature. No build step, no framework lock-in, no dependencies to break.
 - **Decision -> Because -> Over alternative** → Every key decision in the journal captures rationale and what was rejected, preventing confabulated reasoning at the L2 episodic layer.
 - **State injection, not retrieval** → The wake protocol injects operational state like resuming a CPU from sleep — not fetching facts from a filing cabinet.
-- **Zeigarnik tension as a primitive** → Unfinished tasks create psychological pull. Capturing this tension means Elle doesn't just know what to do — she feels the pull to finish it.
+- **Zeigarnik tension as a primitive** → Unfinished tasks create psychological pull. v2.5 splits this into Primary (the one gravitational center) and Secondary (satellite tensions), so Elle knows where to focus first.
+- **Vibe State vs Directive** → The affective texture (how the session felt) is separated from the behavioral instruction (how next-Claude should act). State is descriptive; Directive is prescriptive.
+- **Shock Score delta tracking** → Prior Shock Score + Delta enable longitudinal continuity analysis — are sessions getting smoother over time? The hibernating Claude computes this in the moment, not reconstructed later.
 - **Decision Objects as first-class data** → Structured records with rationale + rejected alternatives prevent confabulated reasoning and make decisions queryable.
 - **Anti-Goals as hard constraints** → Explicit "do NOT" directives prevent scope drift and re-litigation of settled questions. Specific temptations, not abstractions.
 - **Truth status tiers** → Separating Known True / Inferred / Unknown prevents hallucination by making epistemic confidence explicit.

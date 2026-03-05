@@ -6,6 +6,42 @@ Built by Ralph Martello and Elle.
 
 ---
 
+## [v3.1] — 2026-03-05
+
+**L3 Schema v2.5 — Structured Sub-Fields**
+
+Five enhancements to the Kinetic Save-State, splitting flat fields into structured sub-fields for richer continuity capture. All changes are backward-compatible — v2.1 string-format data still loads and displays correctly via `typeof` checks.
+
+### Added
+- **Vibe State + Directive** — Split single VIBE string into `State` (affective texture: tone, cadence, energy) and `Directive` (one-line behavioral instruction for next-Claude). Custom edit form with labeled textareas, custom read-mode rendering with sub-labels.
+- **Hot Cache heat indicators** — Updated placeholder guidance for decay priority: 🔴 time-sensitive (with optional `EXPIRES` date), 🟡 active no deadline, 🟢 background. Stored as plain text — heat indicators are text-based conventions, no structural change needed.
+- **Zeigarnik Primary + Secondary** — Split flat bullet list into `Primary` (gravitational center — the one thing pulling hardest) and `Secondary` (satellite tensions). Custom edit form and read-mode display with sub-labels.
+- **Wake-Up Injection Primary + Fallback** — Split into `Primary` (exact first sentence, mid-breath) and `Fallback` (generic redirect if primary is stale after ~72hrs). Custom edit/read rendering with italic quotes.
+- **Session Metrics priorShockScore + delta** — Added `Prior Shock Score` (previous session's score) and `Delta` (current minus prior; negative = improving, positive = degrading). Color-coded display: green for improving, red for degrading, gold for zero.
+- **6 backward-compat helper functions** — `getVibeState()`, `getVibeDirective()`, `getZeigPrimary()`, `getZeigSecondary()`, `getWakePrimary()`, `getWakeFallback()` — each uses `typeof` checks to safely extract values from either v2.1 strings or v2.5 objects.
+- **v2.5 parser extensions** — `parseSessionCapture()` detects `State:/Directive:`, `Primary:/Secondary:`, `Primary:/Fallback:`, and `Prior Shock Score:/Delta:` sub-lines. Falls back to v2.1 flat format when sub-labels are absent.
+- **L3 Schema Spec v2.5** (`artificial_hippocampus_L3_schema_v2.5.md`) — Authoritative design document defining format, examples, and backward-compatibility rules for all 5 enhancements.
+
+### Changed
+- `SS_FIELDS` constant — Removed `vibe` and `zeigarnikTension` entries (now rendered as custom sub-field sections). Updated `hotCache` placeholder with heat indicator guidance.
+- `hasSaveStateContent()` — Added `hasField()` helper with `typeof` checks to detect content in both string and object field formats.
+- `generateSaveStateFromJournal()` — Returns v2.5 structured objects (`{ state, directive }`, `{ primary, secondary }`, `{ primary, fallback }`).
+- `formatSingleWake()` — Outputs v2.5 format with State/Directive, Primary/Secondary zeigarnik, Primary/Fallback wake-up, and priorShockScore/delta in metrics.
+- `formatMergedWake()` — Multi-source merging outputs v2.5 sub-fields per source with labeled State/Directive pairs.
+- `saveSaveStateForm()` — Collects all v2.5 structured objects from the edit form.
+- `generateFromJournal()` — Sets all v2.5 sub-field form elements when auto-generating from journal data.
+- Edit form — Custom sections for Vibe (State/Directive), Zeigarnik (Primary/Secondary), Wake-Up (Primary/Fallback), and Metrics (Prior Shock Score + Delta inputs).
+- Read-mode display — Custom rendering for all v2.5 sub-fields with sub-labels and appropriate formatting.
+
+### Unchanged
+- IndexedDB schema unchanged (still v3)
+- Chrome extension unaffected
+- All v2.1 string-format data loads and displays correctly (backward compatible)
+- Hot Cache remains a plain string field — no structural change
+- Export/import format unchanged
+
+---
+
 ## [v3.0] — 2026-03-04
 
 **Multi-Source Memory Support**
